@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTPx Cloud Scanner - Futuristic Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <div class="login-header">
+                    <h2>🚀 HTTPx Cloud Scanner</h2>
+                    <p>Futuristic Multi-Service Intelligence Platform</p>
+                </div>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Launch Panel</button>
+                </form>
+                <div id="loginError" class="error-message"></div>
+            </div>
+        </div>
+
+        <!-- Password Change Modal -->
+        <div id="passwordModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h2>Security Update Required</h2>
+                <p>First-time setup: Please secure your access credentials.</p>
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label for="oldPassword">Current Password:</label>
+                        <input type="password" id="oldPassword" name="oldPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">New Password:</label>
+                        <input type="password" id="newPassword" name="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password:</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update Security</button>
+                </form>
+                <div id="passwordError" class="error-message"></div>
+            </div>
+        </div>
+
+        <!-- Global Messages Container -->
+        <div id="globalMessages" class="global-messages" aria-live="polite" aria-atomic="true"></div>
+
+        <!-- Main App -->
+        <div id="mainApp" class="main-app" style="display: none;">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <h1>🚀 HTTPx Cloud Scanner</h1>
+                    <div class="header-status">
+                        <span class="status-indicator"></span>
+                        <span id="systemStatus">All Systems Online</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="global-stats">
+                        <div class="stat-mini">
+                            <span class="stat-label">Active Scans</span>
+                            <span id="headerActiveScans" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-mini">
+                            <span class="stat-label">Total Hits</span>
+                            <span id="headerTotalHits" class="stat-value">0</span>
+                        </div>
+                    </div>
+                    <div class="user-info">
+                        <span id="userInfo">Admin</span>
+                        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Navigation -->
+            <nav class="app-nav">
+                <button class="nav-btn active" data-tab="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">Dashboard</span>
+                </button>
+                <button class="nav-btn" data-tab="scan">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">Scan</span>
+                </button>
+                <button class="nav-btn" data-tab="lists">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-label">Lists</span>
+                </button>
+                <button class="nav-btn" data-tab="statistiques">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-label">Statistiques</span>
+                </button>
+                <button class="nav-btn" data-tab="resultats">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">Résultats</span>
+                </button>
+                <button class="nav-btn" data-tab="domaines">
+                    <span class="nav-icon">🌐</span>
+                    <span class="nav-label">Domaines</span>
+                </button>
+                <button class="nav-btn" data-tab="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">Settings</span>
+                </button>
+            </nav>
+
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="dashboard-grid">
+                    <!-- Contrôle du Cracker Section (French UI) -->
+                    <div class="cracker-control-section">
+                        <h3>🎮 Contrôle du Cracker</h3>
+                        <div class="cracker-panel">
+                            <div class="cracker-status">
+                                <div class="status-row">
+                                    <span class="status-label">Statut:</span>
+                                    <span id="crackerStatus" class="status-value stopped">ARRÊTÉ</span>
+                                </div>
+                                <div class="status-row">
+                                    <span class="status-label">État:</span>
+                                    <span id="crackerState" class="status-value">Prêt</span>
+                                </div>
+                                <div class="status-message">
+                                    <span id="crackerMessage">Prêt pour le scan</span>
+                                </div>
+                            </div>
+                            <div class="cracker-controls">
+                                <button id="startCrackerBtn" class="btn btn-success">▶️ Démarrer</button>
+                                <button id="stopCrackerBtn" class="btn btn-danger" disabled>⏹️ Arrêter</button>
+                                <button id="refreshCrackerBtn" class="btn btn-secondary">🔄 Actualiser</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Stats Cards -->
+                    <div class="stats-section">
+                        <h3>🔥 Live Intelligence</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card primary">
+                                <div class="stat-header">
+                                    <span class="stat-icon">🚀</span>
+                                    <span class="stat-title">Active Scans</span>
+                                </div>
+                                <div class="stat-value" id="totalActiveScans">0</div>
+                                <div class="stat-change positive">+2 this hour</div>
+                            </div>
+                            <div class="stat-card secondary">
+                                <div class="stat-header">
+                                    <span class="stat-icon">🎯</span>
+                                    <span class="stat-title">Total Hits</span>
+                                </div>
+                                <div class="stat-value" id="totalHits">0</div>
+                                <div class="stat-change positive">+47 verified</div>
+                            </div>
+                            <div class="stat-card accent">
+                                <div class="stat-header">
+                                    <span class="stat-icon">⚡</span>
+                                    <span class="stat-title">Throughput</span>
+                                </div>
+                                <div class="stat-value" id="globalThroughput">0/sec</div>
+                                <div class="stat-change neutral">avg. checks</div>
+                            </div>
+                            <div class="stat-card success">
+                                <div class="stat-header">
+                                    <span class="stat-icon">✅</span>
+                                    <span class="stat-title">Success Rate</span>
+                                </div>
+                                <div class="stat-value" id="successRate">0%</div>
+                                <div class="stat-change positive">verified hits</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Scans -->
+                    <div class="active-scans-section">
+                        <div class="section-header">
+                            <h3>🎮 Active Scan Operations</h3>
+                            <button class="btn btn-primary" onclick="switchTab('scan')">+ New Scan</button>
+                        </div>
+                        <div id="activeScansList" class="active-scans-grid">
+                            <!-- Active scan cards will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- System Resources -->
+                    <div class="resources-section">
+                        <h3>💻 System Performance</h3>
+                        <div class="resource-grid">
+                            <div class="resource-card">
+                                <div class="resource-header">
+                                    <span class="resource-icon">🔥</span>
+                                    <span class="resource-title">CPU Usage</span>
+                                </div>
+                                <div class="resource-value">
+                                    <span id="cpuUsage" class="resource-number">0%</span>
+                                    <div class="resource-bar">
+                                        <div class="resource-fill" id="cpuBar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="resource-card">
+                                <div class="resource-header">
+                                    <span class="resource-icon">💾</span>
+                                    <span class="resource-title">Memory</span>
+                                </div>
+                                <div class="resource-value">
+                                    <span id="ramUsage" class="resource-number">0MB</span>
+                                    <div class="resource-bar">
+                                        <div class="resource-fill" id="ramBar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="resource-card">
+                                <div class="resource-header">
+                                    <span class="resource-icon">🌐</span>
+                                    <span class="resource-title">Network I/O</span>
+                                </div>
+                                <div class="resource-value">
+                                    <span id="networkIO" class="resource-number">0MB/s</span>
+                                    <div class="resource-bar">
+                                        <div class="resource-fill" id="networkBar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scan Tab -->
+            <div id="scan" class="tab-content">
+                <div class="scan-container">
+                    <!-- Scan Flow Stepper -->
+                    <div class="stepper">
+                        <div class="stepper-step active" data-step="targets">
+                            <div class="stepper-icon">1</div>
+                            <div class="stepper-content">
+                                <div class="stepper-title">Targets</div>
+                                <div class="stepper-description">Select targets and wordlists</div>
+                            </div>
+                        </div>
+                        <div class="stepper-step" data-step="config">
+                            <div class="stepper-icon">2</div>
+                            <div class="stepper-content">
+                                <div class="stepper-title">Config</div>
+                                <div class="stepper-description">Performance and modules</div>
+                            </div>
+                        </div>
+                        <div class="stepper-step" data-step="review">
+                            <div class="stepper-icon">3</div>
+                            <div class="stepper-content">
+                                <div class="stepper-title">Review</div>
+                                <div class="stepper-description">Validate and prepare</div>
+                            </div>
+                        </div>
+                        <div class="stepper-step" data-step="live">
+                            <div class="stepper-icon">🎯</div>
+                            <div class="stepper-content">
+                                <div class="stepper-title">Live</div>
+                                <div class="stepper-description">Monitor operation</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pre-Scan Configuration -->
+                    <div id="preScanConfig" class="scan-section">
+                        <div class="scan-header">
+                            <h2>🎯 Launch New Intelligence Operation</h2>
+                            <div class="scan-subtitle">Configure your high-performance scanning mission</div>
+                            <!-- Readiness Indicator -->
+                            <div id="readinessIndicator" class="readiness-indicator pending">
+                                <span>⚠️</span>
+                                <span id="readinessText">Setup required</span>
+                            </div>
+                        </div>
+
+                        <form id="scanForm" class="scan-form">
+                            <!-- Basic Configuration -->
+                            <div class="config-section">
+                                <h3>🔧 Mission Configuration</h3>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="crackName">Operation Name:</label>
+                                        <input type="text" id="crackName" name="crackName" placeholder="e.g., Cloud-Recon-Alpha-2025" required>
+                                        <small>Unique identifier for this operation</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="timeout">Timeout (seconds):</label>
+                                        <input type="number" id="timeout" name="timeout" value="10" min="1" max="60">
+                                        <small>Request timeout per target</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Target Configuration -->
+                            <div class="config-section">
+                                <h3>🎯 Target Selection</h3>
+                                
+                                <!-- Saved Target Lists Selector -->
+                                <div class="form-group">
+                                    <label for="targetsListId">Saved Target Lists:</label>
+                                    <select id="targetsListId" name="targetsListId">
+                                        <option value="">Select a saved list (optional)</option>
+                                    </select>
+                                    <small>Choose a previously uploaded target list or paste targets below</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="targets">Target URLs/Domains:</label>
+                                    <textarea id="targets" name="targets" rows="4" placeholder="example.com&#10;https://target.com&#10;app.example.com" required></textarea>
+                                    <div class="upload-actions">
+                                        <button type="button" id="uploadTargetsBtn" class="btn btn-secondary">📁 Upload Targets File</button>
+                                        <input type="file" id="targetsFile" accept=".txt,.csv" style="display: none;">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="wordlistSelect">Wordlist Selection:</label>
+                                    <select id="wordlistSelect" name="wordlist">
+                                        <option value="paths.txt">Default Wordlist (paths.txt)</option>
+                                    </select>
+                                    <div class="upload-actions">
+                                        <button type="button" id="uploadPathsBtn" class="btn btn-secondary">📁 Upload paths.txt</button>
+                                        <input type="file" id="pathsFile" accept=".txt" style="display: none;">
+                                        <button type="button" onclick="switchTab('lists')" class="btn btn-accent">📋 Manage Lists</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Scaling Configuration -->
+                            <div class="config-section">
+                                <h3>🚀 Performance Scaling</h3>
+                                <div class="scaling-control">
+                                    <label for="concurrencySlider">Concurrency Level:</label>
+                                    <div class="slider-container">
+                                        <input type="range" id="concurrencySlider" name="concurrency" min="10" max="50000" value="1000" class="futuristic-slider">
+                                        <div class="slider-labels">
+                                            <span>10</span>
+                                            <span>10K</span>
+                                            <span>50K</span>
+                                            <span>100K (MAX)</span>
+                                        </div>
+                                    </div>
+                                    <div class="slider-value">
+                                        <span id="concurrencyValue">1,000</span> concurrent threads
+                                        <div class="performance-indicator" id="performanceIndicator">⚡ High Performance</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Module Selection -->
+                            <div class="config-section">
+                                <h3>🔍 Intelligence Modules</h3>
+                                <div class="module-grid">
+                                    <label class="module-card">
+                                        <input type="checkbox" name="modules" value="laravel" checked>
+                                        <div class="module-content">
+                                            <span class="module-icon">🔥</span>
+                                            <span class="module-name">Laravel</span>
+                                            <span class="module-desc">Framework Exploits</span>
+                                        </div>
+                                    </label>
+                                    <label class="module-card">
+                                        <input type="checkbox" name="modules" value="httpx" checked>
+                                        <div class="module-content">
+                                            <span class="module-icon">🌐</span>
+                                            <span class="module-name">HTTPx</span>
+                                            <span class="module-desc">Web Discovery</span>
+                                        </div>
+                                    </label>
+                                    <label class="module-card">
+                                        <input type="checkbox" name="modules" value="git" checked>
+                                        <div class="module-content">
+                                            <span class="module-icon">📂</span>
+                                            <span class="module-name">Git</span>
+                                            <span class="module-desc">Repository Exposure</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Service Selection -->
+                            <div class="config-section">
+                                <h3>☁️ Cloud Services Intelligence</h3>
+                                <div class="service-grid">
+                                    <label class="service-card aws">
+                                        <input type="checkbox" name="services" value="aws_ses" checked>
+                                        <div class="service-content">
+                                            <span class="service-icon">📧</span>
+                                            <span class="service-name">AWS SES</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card aws">
+                                        <input type="checkbox" name="services" value="aws_sns" checked>
+                                        <div class="service-content">
+                                            <span class="service-icon">📲</span>
+                                            <span class="service-name">AWS SNS</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card email">
+                                        <input type="checkbox" name="services" value="smtp" checked>
+                                        <div class="service-content">
+                                            <span class="service-icon">📮</span>
+                                            <span class="service-name">SMTP</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card twilio">
+                                        <input type="checkbox" name="services" value="twilio" checked>
+                                        <div class="service-content">
+                                            <span class="service-icon">📞</span>
+                                            <span class="service-name">Twilio</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card nexmo">
+                                        <input type="checkbox" name="services" value="nexmo">
+                                        <div class="service-content">
+                                            <span class="service-icon">💬</span>
+                                            <span class="service-name">Nexmo</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card plivo">
+                                        <input type="checkbox" name="services" value="plivo">
+                                        <div class="service-content">
+                                            <span class="service-icon">📱</span>
+                                            <span class="service-name">Plivo</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card sendgrid">
+                                        <input type="checkbox" name="services" value="sendgrid" checked>
+                                        <div class="service-content">
+                                            <span class="service-icon">🚀</span>
+                                            <span class="service-name">SendGrid</span>
+                                        </div>
+                                    </label>
+                                    <label class="service-card mailjet">
+                                        <input type="checkbox" name="services" value="mailjet">
+                                        <div class="service-content">
+                                            <span class="service-icon">✈️</span>
+                                            <span class="service-name">Mailjet</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Launch Controls -->
+                            <div class="launch-section">
+                                <button type="submit" class="btn btn-launch">
+                                    <span class="btn-icon">🚀</span>
+                                    <span class="btn-text">Launch Intelligence Operation</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Live Scan Monitoring -->
+                    <div id="liveScanMonitor" class="scan-section" style="display: none;">
+                        <div class="scan-header">
+                            <h2 id="activeScanTitle">🎯 Operation: Loading...</h2>
+                            <div class="scan-controls">
+                                <button id="pauseResumeBtn" class="btn btn-warning">⏸️ Pause</button>
+                                <button id="stopScanBtn" class="btn btn-danger">🛑 Stop</button>
+                            </div>
+                        </div>
+
+                        <!-- Real-time Stats -->
+                        <div class="live-stats-grid">
+                            <div class="live-stat-card">
+                                <div class="stat-label">Status</div>
+                                <div id="scanStatus" class="stat-value running">RUNNING</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Progress</div>
+                                <div id="scanProgress" class="stat-value">0%</div>
+                                <div class="progress-bar">
+                                    <div id="progressFill" class="progress-fill"></div>
+                                </div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Processed URLs</div>
+                                <div id="processedUrls" class="stat-value">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Total URLs</div>
+                                <div id="totalUrls" class="stat-value">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Hits Found</div>
+                                <div id="hitsFound" class="stat-value success">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Checks/sec</div>
+                                <div id="checksPerSec" class="stat-value">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">URLs/sec</div>
+                                <div id="urlsPerSec" class="stat-value">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">ETA</div>
+                                <div id="scanEta" class="stat-value">Calculating...</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Errors</div>
+                                <div id="scanErrors" class="stat-value error">0</div>
+                            </div>
+                            <div class="live-stat-card">
+                                <div class="stat-label">Invalid URLs</div>
+                                <div id="invalidUrls" class="stat-value">0</div>
+                            </div>
+                        </div>
+
+                        <!-- Live Logs -->
+                        <div class="live-logs-section">
+                            <h3>📊 Live Intelligence Feed</h3>
+                            <div id="liveLogs" class="live-logs-container">
+                                <!-- Live logs will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lists Tab -->
+            <div id="lists" class="tab-content">
+                <div class="lists-container">
+                    <div class="lists-header">
+                        <h2>📋 Intelligence Lists Management</h2>
+                        <div class="lists-actions">
+                            <button id="uploadListBtn" class="btn btn-primary">📁 Upload New List</button>
+                            <input type="file" id="listFile" accept=".txt,.csv" style="display: none;">
+                        </div>
+                    </div>
+
+                    <!-- List Categories -->
+                    <div class="list-categories">
+                        <button class="category-btn active" data-category="all">All Lists</button>
+                        <button class="category-btn" data-category="wordlists">Wordlists</button>
+                        <button class="category-btn" data-category="targets">Targets</button>
+                        <button class="category-btn" data-category="ips">IP Lists</button>
+                    </div>
+
+                    <!-- Lists Grid -->
+                    <div id="listsGrid" class="lists-grid">
+                        <!-- Lists will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- IP Generator Tab -->
+            <div id="ipgen" class="tab-content">
+                <div class="ipgen-container">
+                    <div class="ipgen-header">
+                        <h2>🌐 Unique IP Generator</h2>
+                        <div class="ipgen-subtitle">Generate unique, non-repeating IP address lists for reconnaissance</div>
+                    </div>
+
+                    <div class="ipgen-form-container">
+                        <form id="ipGenForm" class="ipgen-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ipListName">Generated List Name:</label>
+                                    <input type="text" id="ipListName" name="listName" placeholder="e.g., random-ips-2025" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="generatorType">Generation Method:</label>
+                                    <select id="generatorType" name="generatorType" required>
+                                        <option value="random">Random IPs</option>
+                                        <option value="subnet">Subnet Range</option>
+                                        <option value="custom">Custom Range</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Random IP Configuration -->
+                            <div id="randomConfig" class="config-panel">
+                                <h3>🎲 Random IP Generation</h3>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="ipCount">Number of IPs:</label>
+                                        <input type="number" id="ipCount" name="ipCount" value="1000" min="1" max="1000000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="excludePrivate">Exclude Private IPs:</label>
+                                        <input type="checkbox" id="excludePrivate" name="excludePrivate" checked>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Generation Controls -->
+                            <div class="generation-controls">
+                                <button type="submit" class="btn btn-primary">
+                                    <span class="btn-icon">🎯</span>
+                                    <span class="btn-text">Generate IP List</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Generated Lists -->
+                    <div class="generated-lists-section">
+                        <h3>📊 Generated IP Lists</h3>
+                        <div id="generatedListsGrid" class="generated-lists-grid">
+                            <!-- Generated lists will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistiques Tab (French UI) -->
+            <div id="statistiques" class="tab-content">
+                <div class="statistiques-container">
+                    <div class="statistiques-header">
+                        <h2>📈 Statistiques du Scan</h2>
+                        <div class="scan-controls">
+                            <button id="refreshStatsBtn" class="btn btn-accent">🔄 Actualiser</button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Section -->
+                    <div class="progress-section">
+                        <div class="progress-card">
+                            <div class="progress-header">
+                                <h3>Progression du Scan</h3>
+                                <div id="progressPercentage" class="progress-value">0%</div>
+                            </div>
+                            <div class="progress-bar-large">
+                                <div id="progressBarFill" class="progress-fill-large"></div>
+                            </div>
+                            <div class="progress-details">
+                                <span id="processedUrlsCount">0</span> URLs traitées sur <span id="totalUrlsCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Provider Tiles -->
+                    <div class="provider-tiles">
+                        <h3>Hits par Fournisseur</h3>
+                        <div class="tiles-grid">
+                            <div class="provider-tile aws">
+                                <div class="tile-icon">☁️</div>
+                                <div class="tile-name">AWS</div>
+                                <div id="awsCount" class="tile-count">0</div>
+                            </div>
+                            <div class="provider-tile sendgrid">
+                                <div class="tile-icon">📧</div>
+                                <div class="tile-name">SendGrid</div>
+                                <div id="sendgridCount" class="tile-count">0</div>
+                            </div>
+                            <div class="provider-tile sparkpost">
+                                <div class="tile-icon">⚡</div>
+                                <div class="tile-name">SparkPost</div>
+                                <div id="sparkpostCount" class="tile-count">0</div>
+                            </div>
+                            <div class="provider-tile twilio">
+                                <div class="tile-icon">📱</div>
+                                <div class="tile-name">Twilio</div>
+                                <div id="twilioCount" class="tile-count">0</div>
+                            </div>
+                            <div class="provider-tile brevo">
+                                <div class="tile-icon">🔔</div>
+                                <div class="tile-name">Brevo</div>
+                                <div id="brevoCount" class="tile-count">0</div>
+                            </div>
+                            <div class="provider-tile mailgun">
+                                <div class="tile-icon">🔫</div>
+                                <div class="tile-name">MailGun</div>
+                                <div id="mailgunCount" class="tile-count">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Metrics -->
+                    <div class="performance-metrics">
+                        <h3>Performance</h3>
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Vitesse</div>
+                                <div id="urlsPerSecSpeed" class="metric-value">0 URLs/sec</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Requêtes HTTPS/sec</div>
+                                <div id="httpsReqsPerSec" class="metric-value">0</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Précision</div>
+                                <div id="precisionPercent" class="metric-value">0.00%</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Durée</div>
+                                <div id="scanDuration" class="metric-value">0s</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">ETA</div>
+                                <div id="scanETA" class="metric-value">En cours...</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Hits totaux</div>
+                                <div id="totalHitsCount" class="metric-value success">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Résultats Tab (French UI) -->
+            <div id="resultats" class="tab-content">
+                <div class="resultats-container">
+                    <div class="resultats-header">
+                        <h2>🎯 Résultats des Hits</h2>
+                        <div class="resultats-actions">
+                            <button id="exportResultsBtn" class="btn btn-accent">📊 Exporter</button>
+                            <button id="purgeResultsBtn" class="btn btn-danger">🗑️ Supprimer Tout</button>
+                        </div>
+                    </div>
+
+                    <!-- Counters -->
+                    <div class="counters-section">
+                        <div class="counter-card total">
+                            <div class="counter-label">Total</div>
+                            <div id="totalCounter" class="counter-value">0</div>
+                        </div>
+                        <div class="counter-card valid">
+                            <div class="counter-label">Validés</div>
+                            <div id="validCounter" class="counter-value">0</div>
+                        </div>
+                        <div class="counter-card invalid">
+                            <div class="counter-label">Invalides</div>
+                            <div id="invalidCounter" class="counter-value">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="resultats-filters">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label for="validationFilter">Statut:</label>
+                                <select id="validationFilter">
+                                    <option value="">Tous</option>
+                                    <option value="true">Validés</option>
+                                    <option value="false">Invalides</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="serviceFilterRes">Service:</label>
+                                <select id="serviceFilterRes">
+                                    <option value="">Tous les services</option>
+                                    <option value="aws">AWS</option>
+                                    <option value="sendgrid">SendGrid</option>
+                                    <option value="sparkpost">SparkPost</option>
+                                    <option value="twilio">Twilio</option>
+                                    <option value="brevo">Brevo</option>
+                                    <option value="mailgun">MailGun</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="sortFilter">Trier par:</label>
+                                <select id="sortFilter">
+                                    <option value="date_desc">Date (récent)</option>
+                                    <option value="date_asc">Date (ancien)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results List -->
+                    <div id="resultsList" class="results-list">
+                        <!-- Results will be populated here -->
+                    </div>
+
+                    <!-- Details Drawer -->
+                    <div id="detailsDrawer" class="details-drawer">
+                        <div class="drawer-header">
+                            <h3>Détails du Hit</h3>
+                            <button id="closeDrawer" class="btn btn-secondary">✕</button>
+                        </div>
+                        <div id="drawerContent" class="drawer-content">
+                            <!-- Details will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Domaines Tab (French UI) -->
+            <div id="domaines" class="tab-content">
+                <div class="domaines-container">
+                    <div class="domaines-header">
+                        <h2>🌐 Gestion des Domaines</h2>
+                        <div class="domaines-actions">
+                            <button id="importDomainsBtn" class="btn btn-accent">📁 Importer (.txt)</button>
+                            <button id="refreshDomainsBtn" class="btn btn-secondary">🔄 Actualiser</button>
+                        </div>
+                    </div>
+
+                    <!-- File List -->
+                    <div id="domainsList" class="domains-list">
+                        <!-- Domain files will be populated here -->
+                    </div>
+
+                    <!-- Grabber Section -->
+                    <div class="grabber-section">
+                        <h3>🤖 Grabber de Domaines</h3>
+                        <div class="grabber-controls">
+                            <button id="startGrabberBtn" class="btn btn-primary">▶️ Démarrer</button>
+                            <button id="stopGrabberBtn" class="btn btn-danger" disabled>⏹️ Arrêter</button>
+                        </div>
+                        <div id="grabberStatus" class="grabber-status">
+                            <div class="status-item">
+                                <span class="status-label">État:</span>
+                                <span id="grabberState" class="status-value">Arrêté</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Domaines traités:</span>
+                                <span id="processedDomains" class="status-value">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Candidats générés:</span>
+                                <span id="generatedCandidates" class="status-value">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="domains-notes">
+                        <h4>📝 Notes</h4>
+                        <ul>
+                            <li>Formats supportés: .txt avec un domaine par ligne</li>
+                            <li>Déduplication automatique des gros fichiers</li>
+                            <li>Le Grabber génère des variantes sûres des domaines existants</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <div class="settings-container">
+                    <div class="settings-header">
+                        <h2>⚙️ System Configuration</h2>
+                        <div class="settings-subtitle">Configure notifications, defaults, and system behavior</div>
+                    </div>
+
+                    <div class="settings-sections">
+                        <!-- Telegram Notifications -->
+                        <div class="settings-section">
+                            <h3>📱 Telegram Notifications</h3>
+                            <form id="telegramForm" class="settings-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="telegramBotToken">Bot Token:</label>
+                                        <input type="password" id="telegramBotToken" name="botToken" placeholder="Enter bot token">
+                                        <small>Create a bot via @BotFather and get the token</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="telegramChatId">Chat ID:</label>
+                                        <input type="text" id="telegramChatId" name="chatId" placeholder="Enter chat ID">
+                                        <small>Get your chat ID by messaging your bot</small>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" id="testTelegramBtn" class="btn btn-accent">🧪 Test Notification</button>
+                                    <button type="submit" class="btn btn-primary">💾 Save Settings</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Scan Defaults -->
+                        <div class="settings-section">
+                            <h3>🎯 Scan Defaults</h3>
+                            <form id="scanDefaultsForm" class="settings-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="defaultConcurrency">Default Concurrency:</label>
+                                        <input type="number" id="defaultConcurrency" name="concurrency" value="1000" min="10" max="50000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="defaultTimeout">Default Timeout:</label>
+                                        <input type="number" id="defaultTimeout" name="timeout" value="10" min="1" max="60">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">💾 Save Defaults</button>
+                            </form>
+                        </div>
+
+                        <!-- Data Retention -->
+                        <div class="settings-section">
+                            <h3>🗄️ Data Retention</h3>
+                            <form id="retentionForm" class="settings-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="scanRetentionDays">Scan Retention (days):</label>
+                                        <input type="number" id="scanRetentionDays" name="scanRetention" value="30" min="1" max="365">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="hitRetentionDays">Hit Retention (days):</label>
+                                        <input type="number" id="hitRetentionDays" name="hitRetention" value="90" min="1" max="365">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">💾 Save Retention</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
