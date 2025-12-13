@@ -31,3 +31,4 @@ requests>=2.31.0
 
 # Enhanced Async Support
 asyncio-throttle>=1.0.2
+PyJWT

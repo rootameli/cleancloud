@@ -727,6 +727,36 @@ function filterListsByCategory(category) {
 }
 
 // Settings functions
+// Used by loadSettings() to populate the Settings UI
+function displaySettings(settings) {
+    settings = settings || {};
+
+    // Telegram
+    const telegram = settings.telegram || settings || {};
+    const bot = telegram.bot_token || '';
+    const chat = telegram.chat_id || '';
+
+    // Input fields (adjust if your HTML uses different IDs)
+    const botInput = document.querySelector('input[name="botToken"]') || document.getElementById('botToken');
+    const chatInput = document.querySelector('input[name="chatId"]') || document.getElementById('chatId');
+
+    if (chatInput) chatInput.value = chat || '';
+
+    // IMPORTANT: backend may return masked token like "***" or empty; don't overwrite real token.
+    if (botInput) {
+        botInput.value = '';
+        if (bot) botInput.placeholder = bot; // show "already configured"
+    }
+
+    // Optional checkbox if present
+    const enabledEl =
+        document.querySelector('input[name="telegramEnabled"]') ||
+        document.querySelector('input[name="enabled"]') ||
+        document.getElementById('telegramEnabled');
+    if (enabledEl && typeof telegram.enabled !== 'undefined') {
+        enabledEl.checked = !!telegram.enabled;
+    }
+}
 async function handleTelegramSettings(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
