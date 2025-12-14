@@ -1,39 +1,180 @@
 /* Futuristic HTTPx Cloud Scanner - JavaScript */
 
-// Global variables
-let authToken = localStorage.getItem('authToken');
-let currentUser = null;
-let currentScanId = null;
+// Runtime configuration
+const RUNTIME_CONFIG = {
+    apiBase: '/api/v1',
+    healthEndpoint: '/api/v1/healthz',
+    readyEndpoint: '/api/v1/readyz',
+    stateStorageKey: 'cleanCloudAppState',
+    enableDebug: false,
+    ...(window.CLEAN_CLOUD_CONFIG || {})
+};
+
+// Global state container (persisted across refresh)
+const appState = {
+    initialized: false,
+    ready: false,
+    authToken: localStorage.getItem('authToken'),
+    currentUser: null,
+    currentScanId: null,
+    dashboardConnected: false,
+    currentTab: 'dashboard'
+};
+
+// Expose for debugging/ops visibility
+window.cleanCloudApp = appState;
+
+// API Base URL
+const API_BASE = RUNTIME_CONFIG.apiBase || '/api/v1';
+
+// Convenience aliases for legacy variables
+let authToken = appState.authToken;
+let currentUser = appState.currentUser;
+let currentScanId = appState.currentScanId;
 let websocketConnection = null;
 let dashboardWebSocket = null;
 let isFirstLogin = false;
 
-// API Base URL
-const API_BASE = '/api/v1';
-
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
+    bootstrapApplication();
 });
+
+async function bootstrapApplication() {
+    try {
+        console.log('🚀 Bootstrapping HTTPx Cloud Scanner...', RUNTIME_CONFIG);
+        restoreAppState();
+        await checkBackendHealth();
+        initializeApp();
+        appState.initialized = true;
+        persistAppState();
+    } catch (error) {
+        console.error('❌ Critical bootstrap failure:', error);
+        showUserMessage('Application initialization failed. Check console logs for details.', 'error');
+    }
+}
 
 function initializeApp() {
     console.log('🚀 Initializing HTTPx Cloud Scanner...');
-    
+
     // Check authentication status
     if (authToken) {
         verifyTokenAndShowApp();
     } else {
         showLogin();
     }
-    
+
     // Setup event listeners
     setupEventListeners();
-    
+
     // Initialize UI components
     initializeUIComponents();
-    
+
+    // Restore UI state
+    restoreUIState();
+
     // Initialize lists cache and populate selectors
     loadLists();
+}
+
+function restoreAppState() {
+    try {
+        const rawState = localStorage.getItem(RUNTIME_CONFIG.stateStorageKey);
+        if (!rawState) return;
+
+        const saved = JSON.parse(rawState);
+        if (saved.authToken) {
+            authToken = saved.authToken;
+            appState.authToken = saved.authToken;
+        }
+        if (saved.currentUser) {
+            currentUser = saved.currentUser;
+            appState.currentUser = saved.currentUser;
+        }
+        if (saved.currentScanId) {
+            currentScanId = saved.currentScanId;
+            appState.currentScanId = saved.currentScanId;
+        }
+        if (saved.currentTab) {
+            appState.currentTab = saved.currentTab;
+        }
+    } catch (error) {
+        console.error('Failed to restore saved state:', error);
+    }
+}
+
+function restoreUIState() {
+    try {
+        if (appState.currentTab) {
+            switchTab(appState.currentTab);
+        }
+
+        if (authToken && currentScanId) {
+            connectScanWebSocket(currentScanId);
+        }
+    } catch (error) {
+        console.warn('Unable to restore UI state:', error);
+    }
+}
+
+function persistAppState() {
+    try {
+        const payload = {
+            authToken,
+            currentUser,
+            currentScanId,
+            currentTab: appState.currentTab
+        };
+        localStorage.setItem(RUNTIME_CONFIG.stateStorageKey, JSON.stringify(payload));
+    } catch (error) {
+        console.error('Failed to persist app state:', error);
+    }
+}
+
+async function checkBackendHealth() {
+    try {
+        const response = await fetch(RUNTIME_CONFIG.healthEndpoint, { method: 'GET' });
+        if (!response.ok) {
+            console.error('Health check failed:', response.status, response.statusText);
+            setAppNotReady('backend not reachable');
+            return;
+        }
+
+        const health = await response.json();
+        setAppReady(health);
+    } catch (error) {
+        console.error('Health check error:', error);
+        setAppNotReady(error?.message || 'Health check error');
+    }
+}
+
+function setAppReady(health) {
+    appState.ready = true;
+    updateSystemStatus('Ready', true, health);
+}
+
+function setAppNotReady(reason = 'Not ready') {
+    appState.ready = false;
+    updateSystemStatus(reason, false);
+}
+
+function updateSystemStatus(message, isReady = false, health = null) {
+    const statusEl = document.getElementById('systemStatus');
+    const indicator = document.querySelector('.status-indicator');
+
+    if (statusEl) {
+        const healthText = health?.status ? `${message} (${health.status})` : message;
+        statusEl.textContent = healthText;
+    }
+
+    if (indicator) {
+        indicator.classList.toggle('ready', isReady);
+        indicator.classList.toggle('not-ready', !isReady);
+    }
+
+    if (!isReady) {
+        console.error('System not ready:', message);
+    }
 }
 
 function setupEventListeners() {
@@ -63,6 +204,14 @@ function setupEventListeners() {
             switchTab(tab);
         });
     });
+
+    // Dashboard controls
+    const startCrackerBtn = document.getElementById('startCrackerBtn');
+    const stopCrackerBtn = document.getElementById('stopCrackerBtn');
+    const refreshCrackerBtn = document.getElementById('refreshCrackerBtn');
+    if (startCrackerBtn) startCrackerBtn.addEventListener('click', startCracker);
+    if (stopCrackerBtn) stopCrackerBtn.addEventListener('click', () => handleStopScan());
+    if (refreshCrackerBtn) refreshCrackerBtn.addEventListener('click', refreshCrackerStatus);
     
     // Scan form
     const scanForm = document.getElementById('scanForm');
@@ -179,6 +328,9 @@ async function handleLogin(e) {
             authToken = data.access_token;
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
+            appState.authToken = authToken;
+            appState.currentUser = currentUser;
+            persistAppState();
             isFirstLogin = data.first_login || false;
             
             if (isFirstLogin) {
@@ -240,7 +392,12 @@ async function handlePasswordChange(e) {
 function handleLogout() {
     authToken = null;
     currentUser = null;
+    currentScanId = null;
+    appState.authToken = null;
+    appState.currentUser = null;
+    appState.currentScanId = null;
     localStorage.removeItem('authToken');
+    persistAppState();
     
     // Close WebSocket connections
     if (websocketConnection) {
@@ -251,7 +408,7 @@ function handleLogout() {
         dashboardWebSocket.close();
         dashboardWebSocket = null;
     }
-    
+
     showLogin();
 }
 
@@ -264,10 +421,13 @@ async function verifyTokenAndShowApp() {
         if (response.ok) {
             const userData = await response.json();
             currentUser = userData;
+            appState.currentUser = userData;
+            persistAppState();
             showMainApp();
         } else {
             authToken = null;
             localStorage.removeItem('authToken');
+            persistAppState();
             showLogin();
         }
     } catch (error) {
@@ -816,9 +976,10 @@ function connectDashboardWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${authToken}`;
     dashboardWebSocket = new WebSocket(wsUrl);
-    
+
     dashboardWebSocket.onopen = function() {
         console.log('Dashboard WebSocket connected');
+        appState.dashboardConnected = true;
     };
     
     dashboardWebSocket.onmessage = function(event) {
@@ -828,10 +989,11 @@ function connectDashboardWebSocket() {
     
     dashboardWebSocket.onclose = function() {
         console.log('Dashboard WebSocket disconnected');
+        appState.dashboardConnected = false;
         // Attempt to reconnect after 5 seconds
         setTimeout(connectDashboardWebSocket, 5000);
     };
-    
+
     dashboardWebSocket.onerror = function(error) {
         console.error('Dashboard WebSocket error:', error);
     };
@@ -1503,12 +1665,17 @@ async function handleScanSubmit(e) {
         if (response.ok) {
             const result = await response.json();
             currentScanId = result.scan_id;
-            
+            appState.currentScanId = currentScanId;
+            persistAppState();
+
             showUserMessage(`Scan started successfully: ${result.scan_id}`, 'success', 'Operation Launched');
-            
+
             // Transition to live monitoring
             showLiveScanMonitor(result.scan_id, scanRequest.name);
             updateStepperState('live');
+
+            // Connect to WebSocket for live updates
+            connectScanWebSocket(currentScanId);
             
             // Reset form
             e.target.reset();
@@ -1797,6 +1964,9 @@ async function stopScan(scanId) {
         
         if (response.ok) {
             showSuccess('Scan stopped successfully');
+            appState.currentScanId = null;
+            currentScanId = null;
+            persistAppState();
         } else {
             const error = await response.json();
             showError('scanError', error.detail || 'Failed to stop scan');
@@ -2168,6 +2338,47 @@ async function deleteDomainList(listId) {
 }
 
 // Cracker control functions
+async function startCracker() {
+    const scanForm = document.getElementById('scanForm');
+    if (!scanForm) {
+        console.error('Scan form not found');
+        showUserMessage('Impossible de lancer un scan: formulaire introuvable.', 'error');
+        return;
+    }
+
+    // Ensure backend is reachable before submitting
+    if (!appState.ready) {
+        await checkBackendHealth();
+    }
+
+    switchTab('scan');
+    if (scanForm.reportValidity()) {
+        scanForm.requestSubmit();
+    } else {
+        showUserMessage('Complétez la configuration du scan avant de démarrer.', 'warning');
+    }
+}
+
+async function refreshCrackerStatus() {
+    await checkBackendHealth();
+    loadDashboardData();
+
+    if (currentScanId) {
+        try {
+            const response = await fetch(`${API_BASE}/scans/${currentScanId}/progress`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+
+            if (response.ok) {
+                const progress = await response.json();
+                updateLiveScanStats(progress);
+            }
+        } catch (error) {
+            console.error('Failed to refresh scan status:', error);
+        }
+    }
+}
+
 function updateCrackerStatus(isRunning) {
     const statusEl = document.getElementById('crackerStatus');
     const stateEl = document.getElementById('crackerState');
@@ -2257,7 +2468,14 @@ document.addEventListener('DOMContentLoaded', function() {
 // Update the switchTab function to handle new tabs
 const originalSwitchTab = window.switchTab;
 window.switchTab = function(tabName) {
-    originalSwitchTab(tabName);
+    if (typeof originalSwitchTab === 'function') {
+        originalSwitchTab(tabName);
+    } else {
+        console.error('switchTab base implementation missing');
+    }
+
+    appState.currentTab = tabName;
+    persistAppState();
     
     // Load data for specific tabs
     switch(tabName) {
