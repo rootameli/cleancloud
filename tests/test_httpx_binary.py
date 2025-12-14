@@ -31,3 +31,15 @@ def test_httpx_health_reports_missing_when_env_points_to_nowhere(monkeypatch):
 
     assert healthy is False
     assert "missing" in detail.lower()
+
+
+def test_get_scan_stats_returns_copy(monkeypatch):
+    monkeypatch.delenv("HTTPX_PATH", raising=False)
+    executor = HTTPxExecutor()
+
+    executor.scan_stats["scan-123"] = {"processed_urls": 10, "start_time": 1.0}
+
+    stats = executor.get_scan_stats("scan-123")
+
+    assert stats == {"processed_urls": 10, "start_time": 1.0}
+    assert stats is not executor.scan_stats["scan-123"]

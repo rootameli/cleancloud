@@ -408,7 +408,9 @@ class HTTPxExecutor:
     
     def get_scan_stats(self, scan_id: str) -> Optional[Dict[str, Any]]:
         """Get current scan statistics"""
-        return self.scan_stats.get(scan_id)
+        stats = self.scan_stats.get(scan_id)
+        # Return a shallow copy to avoid callers mutating internal state
+        return dict(stats) if stats else None
     
     def list_running_scans(self) -> List[str]:
         """List currently running scan IDs"""
