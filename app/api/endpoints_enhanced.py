@@ -94,7 +94,7 @@ async def health_check():
     """Health check endpoint with service status"""
     from ..core.redis_manager import get_redis
     from ..core.database import async_engine
-    
+
     status = {
         "status": "healthy",
         "service": "httpx_scanner",
@@ -136,7 +136,8 @@ async def health_check():
         status["components"]["httpx"] = httpx_detail
         status["status"] = "degraded"
 
-    return status
+    status_code = 200 if status["status"] == "healthy" else 503
+    return JSONResponse(content=status, status_code=status_code)
 
 @router.get("/metrics")
 async def get_metrics():

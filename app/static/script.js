@@ -106,10 +106,13 @@ function restoreAppState() {
 function restoreUIState() {
     try {
         const tabToRestore = appState.currentTab || 'dashboard';
-        switchTab(tabToRestore);
 
+        // If a scan is in progress, prioritize restoring its monitor
         if (authToken && currentScanId) {
+            switchTab('scan');
             restoreActiveScan(currentScanId);
+        } else {
+            switchTab(tabToRestore);
         }
     } catch (error) {
         console.warn('Unable to restore UI state:', error);
@@ -501,6 +504,9 @@ function switchTab(tabName) {
     const activeTab = document.getElementById(targetTab);
     if (!activeTab) {
         console.error(`Tab ${targetTab} not found in DOM`);
+        if (targetTab !== 'dashboard') {
+            return switchTab('dashboard');
+        }
         return;
     }
 
