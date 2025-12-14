@@ -43,6 +43,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://httpx:httpx@postgres:5432/httpx_scanner
       - REDIS_URL=redis://redis:6379/0
       - USE_REDIS=${USE_REDIS:-true}
+      - HTTPX_PATH=/usr/local/bin/httpx
       - SECRET_KEY=${SECRET_KEY:-httpx-scanner-development-key}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-development-key}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}

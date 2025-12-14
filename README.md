@@ -878,6 +878,16 @@ rm .env data/config.yml
 ./scripts/setup.sh
 ```
 
+## Deployment on VPS
+
+The Docker image now bundles the official ProjectDiscovery **httpx** CLI (Linux amd64, pinned release) in `/usr/local/bin/httpx`. The API service sets `HTTPX_PATH=/usr/local/bin/httpx` via `docker-compose.yml`, so scans always call the packaged binary without relying on host tooling.
+
+To deploy on a fresh VPS:
+
+1. Build and start the stack: `docker compose up -d --build`
+2. Verify health (includes httpx binary check): `curl -f http://localhost:8000/api/v1/healthz`
+3. Launch scans from the UI—no extra installation on the VPS is required.
+
 ## Contributing
 
 1. Fork the repository
