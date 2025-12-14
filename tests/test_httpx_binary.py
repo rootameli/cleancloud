@@ -17,3 +17,17 @@ def test_httpx_path_prefers_env_override(monkeypatch):
     executor = HTTPxExecutor()
 
     assert executor.httpx_path == "/tmp/fake-httpx"
+
+
+def test_httpx_health_reports_missing_when_env_points_to_nowhere(monkeypatch):
+    missing_path = "/tmp/definitely-missing-httpx"
+    monkeypatch.setenv("HTTPX_PATH", missing_path)
+
+    executor = HTTPxExecutor()
+
+    assert executor.httpx_path == missing_path
+
+    healthy, detail = executor.check_httpx_health()
+
+    assert healthy is False
+    assert "missing" in detail.lower()

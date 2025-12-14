@@ -33,6 +33,7 @@ class HTTPxExecutor:
 
         env_path = os.environ.get("HTTPX_PATH", "").strip()
         if env_path:
+            logger.info("Using httpx binary from HTTPX_PATH", path=env_path)
             return env_path
 
         configured_path = getattr(self.config, "httpx_path", None)
@@ -52,7 +53,11 @@ class HTTPxExecutor:
         if httpx_path:
             return httpx_path
 
-        logger.warning("httpx binary not found in PATH or config")
+        logger.warning(
+            "httpx binary not found via HTTPX_PATH, config, or PATH",
+            env_path=env_path or None,
+            configured_path=configured_path or None,
+        )
         return configured_path if configured_path else None
     
     def check_httpx_health(self) -> Tuple[bool, str]:
