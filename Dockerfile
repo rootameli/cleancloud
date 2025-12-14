@@ -1,6 +1,8 @@
 # Multi-stage Dockerfile for HTTPx Scanner
 FROM python:3.12-slim as builder
 
+ARG HTTPX_VERSION=v1.6.11
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -14,13 +16,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install httpx tool
-RUN curl -s https://api.github.com/repos/projectdiscovery/httpx/releases/latest \
-    | grep "browser_download_url.*linux_amd64.zip" \
-    | cut -d '"' -f 4 \
-    | xargs curl -L -o httpx.zip \
+RUN curl -L -o httpx.zip "https://github.com/projectdiscovery/httpx/releases/download/${HTTPX_VERSION}/httpx_${HTTPX_VERSION#v}_linux_amd64.zip" \
     && unzip httpx.zip \
     && mv httpx /usr/local/bin/ \
     && chmod +x /usr/local/bin/httpx \
+    && /usr/local/bin/httpx -h | head -n 2 \
     && rm httpx.zip
 
 # Production stage

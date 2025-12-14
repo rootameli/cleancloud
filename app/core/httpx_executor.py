@@ -6,6 +6,7 @@ import re
 import time
 import tempfile
 import signal
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
 from datetime import datetime, timezone
@@ -29,23 +30,45 @@ class HTTPxExecutor:
     def _find_httpx_binary(self) -> Optional[str]:
         """Find httpx binary in PATH or config"""
         import shutil
-        
-        # Check config first
-        if hasattr(self.config, 'httpx_path') and self.config.httpx_path:
-            if Path(self.config.httpx_path).exists():
-                return self.config.httpx_path
-        
-        # Check PATH
+
+        configured_path = getattr(self.config, "httpx_path", None)
+
+        # If an explicit path is configured (and not just the default "httpx"), prefer it
+        if configured_path:
+            configured_path = str(configured_path)
+            if Path(configured_path).exists():
+                return configured_path
+
+            # Keep the configured absolute/custom path even if it doesn't exist yet
+            if Path(configured_path).is_absolute() or configured_path != "httpx":
+                return configured_path
+
+        # Check PATH fallback
         httpx_path = shutil.which('httpx')
         if httpx_path:
             return httpx_path
-            
+
         logger.warning("httpx binary not found in PATH or config")
-        return None
+        return configured_path if configured_path else None
     
+    def check_httpx_health(self) -> Tuple[bool, str]:
+        """Check if httpx binary is present and executable"""
+        if not self.httpx_path:
+            return False, "httpx binary not found (configure HTTPX_PATH)"
+
+        path = Path(self.httpx_path)
+        if not path.exists():
+            return False, f"httpx binary missing at {path}"
+
+        if not os.access(path, os.X_OK):
+            return False, f"httpx binary at {path} is not executable"
+
+        return True, str(path)
+
     def is_httpx_available(self) -> bool:
         """Check if httpx binary is available"""
-        return self.httpx_path is not None
+        healthy, _ = self.check_httpx_health()
+        return healthy
     
     async def build_httpx_command(self, scan_request: ScanRequest, targets_file: str) -> List[str]:
         """Build httpx command from scan request"""
