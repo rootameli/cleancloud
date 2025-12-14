@@ -1,5 +1,6 @@
 import bcrypt
 import jwt
+from jwt.exceptions import PyJWTError
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict
@@ -97,7 +98,7 @@ class AuthManager:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired"
             )
-        except jwt.JWTError:
+        except PyJWTError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token"
