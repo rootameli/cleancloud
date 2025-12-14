@@ -94,7 +94,7 @@ async def health_check():
     """Health check endpoint with service status"""
     from ..core.redis_manager import get_redis
     from ..core.database import async_engine
-    
+
     status = {
         "status": "healthy",
         "service": "httpx_scanner",
@@ -127,8 +127,17 @@ async def health_check():
     except Exception:
         status["components"]["redis"] = "not_initialized"
         status["status"] = "degraded"
-    
-    return status
+
+    # Check httpx binary availability
+    healthy, httpx_detail = httpx_executor.check_httpx_health()
+    if healthy:
+        status["components"]["httpx"] = httpx_detail
+    else:
+        status["components"]["httpx"] = httpx_detail
+        status["status"] = "degraded"
+
+    status_code = 200 if status["status"] == "healthy" else 503
+    return JSONResponse(content=status, status_code=status_code)
 
 @router.get("/metrics")
 async def get_metrics():

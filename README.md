@@ -119,9 +119,11 @@ The application requires ProjectDiscovery's httpx CLI tool for live scanning:
 # Install httpx CLI (Go required)
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
 
-# Or download pre-compiled binary
-wget https://github.com/projectdiscovery/httpx/releases/latest/download/httpx_linux_amd64.zip
-unzip httpx_linux_amd64.zip
+# Or download pre-compiled binary (asset name embeds the version)
+# Example with explicit version pin (matches the Docker build convention):
+HTTPX_VERSION=v1.6.11
+wget "https://github.com/projectdiscovery/httpx/releases/download/${HTTPX_VERSION}/httpx_${HTTPX_VERSION#v}_linux_amd64.zip"
+unzip "httpx_${HTTPX_VERSION#v}_linux_amd64.zip"
 sudo mv httpx /usr/local/bin/
 
 # Verify installation
@@ -877,6 +879,18 @@ nano .env  # Edit settings manually
 rm .env data/config.yml
 ./scripts/setup.sh
 ```
+
+## Deployment on VPS
+
+The Docker image now bundles the official ProjectDiscovery **httpx** CLI (Linux amd64, pinned release) in `/usr/local/bin/httpx`. The API service sets `HTTPX_PATH=/usr/local/bin/httpx` via `docker-compose.yml`, so scans always call the packaged binary without relying on host tooling.
+
+If you need to point to a different binary (for example, for a patched build), set `HTTPX_PATH` in the environment; the backend always prefers this override before the config file or PATH lookup.
+
+To deploy on a fresh VPS:
+
+1. Build and start the stack: `docker compose up -d --build`
+2. Verify health (includes httpx binary check): `curl -f http://localhost:8000/api/v1/healthz`
+3. Launch scans from the UI—no extra installation on the VPS is required.
 
 ## Contributing
 
