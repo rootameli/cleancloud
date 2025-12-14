@@ -6,6 +6,7 @@ import re
 import time
 import tempfile
 import signal
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
 from datetime import datetime, timezone
@@ -43,9 +44,24 @@ class HTTPxExecutor:
         logger.warning("httpx binary not found in PATH or config")
         return None
     
+    def check_httpx_health(self) -> Tuple[bool, str]:
+        """Check if httpx binary is present and executable"""
+        if not self.httpx_path:
+            return False, "httpx binary not found (configure HTTPX_PATH)"
+
+        path = Path(self.httpx_path)
+        if not path.exists():
+            return False, f"httpx binary missing at {path}"
+
+        if not os.access(path, os.X_OK):
+            return False, f"httpx binary at {path} is not executable"
+
+        return True, str(path)
+
     def is_httpx_available(self) -> bool:
         """Check if httpx binary is available"""
-        return self.httpx_path is not None
+        healthy, _ = self.check_httpx_health()
+        return healthy
     
     async def build_httpx_command(self, scan_request: ScanRequest, targets_file: str) -> List[str]:
         """Build httpx command from scan request"""

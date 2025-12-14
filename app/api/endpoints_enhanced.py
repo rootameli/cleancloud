@@ -127,7 +127,15 @@ async def health_check():
     except Exception:
         status["components"]["redis"] = "not_initialized"
         status["status"] = "degraded"
-    
+
+    # Check httpx binary availability
+    healthy, httpx_detail = httpx_executor.check_httpx_health()
+    if healthy:
+        status["components"]["httpx"] = httpx_detail
+    else:
+        status["components"]["httpx"] = httpx_detail
+        status["status"] = "degraded"
+
     return status
 
 @router.get("/metrics")

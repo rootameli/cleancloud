@@ -105,12 +105,11 @@ function restoreAppState() {
 
 function restoreUIState() {
     try {
-        if (appState.currentTab) {
-            switchTab(appState.currentTab);
-        }
+        const tabToRestore = appState.currentTab || 'dashboard';
+        switchTab(tabToRestore);
 
         if (authToken && currentScanId) {
-            connectScanWebSocket(currentScanId);
+            restoreActiveScan(currentScanId);
         }
     } catch (error) {
         console.warn('Unable to restore UI state:', error);
@@ -483,33 +482,38 @@ function showMainApp() {
 }
 
 function switchTab(tabName) {
+    const targetTab = tabName || 'dashboard';
+    appState.currentTab = targetTab;
+    persistAppState();
+
     // Update navigation
     document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.tab === tabName) {
-            btn.classList.add('active');
-        }
+        btn.classList.toggle('active', btn.dataset.tab === targetTab);
     });
-    
+
     // Update content
     document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-        content.style.display = 'none';
+        const isActive = content.id === targetTab;
+        content.classList.toggle('active', isActive);
+        content.style.display = isActive ? 'block' : 'none';
     });
-    
-    const activeTab = document.getElementById(tabName);
-    if (activeTab) {
-        activeTab.classList.add('active');
-        activeTab.style.display = 'block';
+
+    const activeTab = document.getElementById(targetTab);
+    if (!activeTab) {
+        console.error(`Tab ${targetTab} not found in DOM`);
+        return;
     }
-    
+
     // Load tab-specific data
-    switch (tabName) {
+    switch (targetTab) {
         case 'dashboard':
             loadDashboardData();
             break;
         case 'scan':
             loadScanConfig();
+            if (currentScanId) {
+                restoreActiveScan(currentScanId);
+            }
             break;
         case 'lists':
             loadLists();
@@ -520,11 +524,24 @@ function switchTab(tabName) {
         case 'hits':
             loadHits();
             break;
+        case 'statistiques':
+            loadStatistiques();
+            break;
+        case 'resultats':
+            loadResultats();
+            break;
+        case 'domaines':
+            loadDomaines();
+            break;
         case 'settings':
             loadSettings();
             break;
+        default:
+            console.warn(`No initialization handler for tab ${targetTab}`);
     }
 }
+
+window.switchTab = switchTab;
 
 // Dashboard functions
 async function loadDashboardData() {
@@ -1032,6 +1049,49 @@ function connectScanWebSocket(scanId) {
             startScanPolling(scanId);
         }
     };
+}
+
+async function restoreActiveScan(scanId) {
+    try {
+        appState.currentScanId = scanId;
+        currentScanId = scanId;
+        persistAppState();
+
+        // Load a snapshot before reconnecting the WebSocket
+        const response = await fetch(`${API_BASE}/scans/${scanId}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) {
+            console.error('Failed to restore scan snapshot', response.status);
+            return;
+        }
+
+        const scanData = await response.json();
+        const stats = {
+            status: scanData.status || 'RUNNING',
+            progress_percent: scanData.progress_percent || 0,
+            processed_urls: scanData.processed_urls || 0,
+            total_urls: scanData.total_urls || 0,
+            hits_count: scanData.hits_count || 0,
+            checks_per_sec: scanData.checks_per_sec || 0,
+            urls_per_sec: scanData.urls_per_sec || 0,
+            eta_seconds: scanData.eta_seconds || scanData.eta || null,
+            errors_count: scanData.errors_count || 0,
+            invalid_urls: scanData.invalid_urls || 0
+        };
+
+        showLiveScanMonitor({
+            crack_id: scanData.crack_id || scanId,
+            total_urls: scanData.total_urls || 0
+        });
+
+        updateLiveScanStats(stats);
+        connectScanWebSocket(scanId);
+    } catch (error) {
+        console.error('Unable to restore active scan:', error);
+        showUserMessage('Impossible de restaurer le suivi du scan.', 'error');
+    }
 }
 
 // Polling fallback for when WebSocket fails
@@ -2464,29 +2524,3 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCrackerStatus(false); // Default to stopped
     });
 });
-
-// Update the switchTab function to handle new tabs
-const originalSwitchTab = window.switchTab;
-window.switchTab = function(tabName) {
-    if (typeof originalSwitchTab === 'function') {
-        originalSwitchTab(tabName);
-    } else {
-        console.error('switchTab base implementation missing');
-    }
-
-    appState.currentTab = tabName;
-    persistAppState();
-    
-    // Load data for specific tabs
-    switch(tabName) {
-        case 'statistiques':
-            loadStatistiques();
-            break;
-        case 'resultats':
-            loadResultats();
-            break;
-        case 'domaines':
-            loadDomaines();
-            break;
-    }
-};
