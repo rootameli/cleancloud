@@ -31,6 +31,10 @@ class HTTPxExecutor:
         """Find httpx binary in PATH or config"""
         import shutil
 
+        env_path = os.environ.get("HTTPX_PATH", "").strip()
+        if env_path:
+            return env_path
+
         configured_path = getattr(self.config, "httpx_path", None)
 
         # If an explicit path is configured (and not just the default "httpx"), prefer it

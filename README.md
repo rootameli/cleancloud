@@ -119,9 +119,11 @@ The application requires ProjectDiscovery's httpx CLI tool for live scanning:
 # Install httpx CLI (Go required)
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
 
-# Or download pre-compiled binary
-wget https://github.com/projectdiscovery/httpx/releases/latest/download/httpx_linux_amd64.zip
-unzip httpx_linux_amd64.zip
+# Or download pre-compiled binary (asset is versioned)
+# Example with explicit version pin:
+HTTPX_VERSION=v1.6.11
+wget "https://github.com/projectdiscovery/httpx/releases/download/${HTTPX_VERSION}/httpx_${HTTPX_VERSION#v}_linux_amd64.zip"
+unzip "httpx_${HTTPX_VERSION#v}_linux_amd64.zip"
 sudo mv httpx /usr/local/bin/
 
 # Verify installation

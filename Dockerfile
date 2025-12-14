@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     findutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install httpx tool
+# Install httpx tool (asset names include the version, e.g. httpx_1.6.11_linux_amd64.zip)
 RUN curl -L -o httpx.zip "https://github.com/projectdiscovery/httpx/releases/download/${HTTPX_VERSION}/httpx_${HTTPX_VERSION#v}_linux_amd64.zip" \
     && unzip httpx.zip \
     && mv httpx /usr/local/bin/ \
