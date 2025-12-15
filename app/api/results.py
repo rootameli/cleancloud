@@ -119,60 +119,7 @@ async def list_results(
     except Exception as e:
         logger.error("Failed to list results", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
-@router.get("/results/counters")
-async def get_results_counters(
-    current_user: dict = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session)
-) -> Dict[str, int]:
-    """Get result counters for French UI (Validés/Invalides/Total)"""
-    try:
-        # Get total count
-        total_query = select(func.count(FindingDB.id))
-        total_result = await session.execute(total_query)
-        total = total_result.scalar() or 0
-        
-        # Get validated count
-        validated_query = select(func.count(FindingDB.id)).where(FindingDB.works == True)
-        validated_result = await session.execute(validated_query)
-        validated = validated_result.scalar() or 0
-        
-        invalid = total - validated
-        
-        return {
-            "total": total,
-            "valides": validated,
-            "invalides": invalid
-        }
-        
-    except Exception as e:
-        logger.error("Failed to get result counters", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.get("/results/providers")
-async def get_provider_stats(
-    current_user: dict = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session)
-) -> Dict[str, int]:
-    """Get hit counts by provider for tiles display"""
-    try:
-        # Query for provider counts
-        query = select(FindingDB.service, func.count(FindingDB.id)).group_by(FindingDB.service)
-        result = await session.execute(query)
-        provider_counts = dict(result.fetchall())
-        
-        # Ensure all expected providers are present
-        expected_providers = ['aws', 'sendgrid', 'sparkpost', 'twilio', 'brevo', 'mailgun']
-        provider_stats = {}
-        
-        for provider in expected_providers:
-            provider_stats[provider] = provider_counts.get(provider, 0)
-        
-        return provider_stats
-        
-    except Exception as e:
-        logger.error("Failed to get provider stats", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/results/{hit_id}")
 async def get_result_details(
@@ -274,3 +221,57 @@ async def purge_all_results(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/results/counters")
+async def get_results_counters(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session)
+) -> Dict[str, int]:
+    """Get result counters for French UI (Validés/Invalides/Total)"""
+    try:
+        # Get total count
+        total_query = select(func.count(FindingDB.id))
+        total_result = await session.execute(total_query)
+        total = total_result.scalar() or 0
+        
+        # Get validated count
+        validated_query = select(func.count(FindingDB.id)).where(FindingDB.works == True)
+        validated_result = await session.execute(validated_query)
+        validated = validated_result.scalar() or 0
+        
+        invalid = total - validated
+        
+        return {
+            "total": total,
+            "valides": validated,
+            "invalides": invalid
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get result counters", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/results/providers")
+async def get_provider_stats(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session)
+) -> Dict[str, int]:
+    """Get hit counts by provider for tiles display"""
+    try:
+        # Query for provider counts
+        query = select(FindingDB.service, func.count(FindingDB.id)).group_by(FindingDB.service)
+        result = await session.execute(query)
+        provider_counts = dict(result.fetchall())
+        
+        # Ensure all expected providers are present
+        expected_providers = ['aws', 'sendgrid', 'sparkpost', 'twilio', 'brevo', 'mailgun']
+        provider_stats = {}
+        
+        for provider in expected_providers:
+            provider_stats[provider] = provider_counts.get(provider, 0)
+        
+        return provider_stats
+        
+    except Exception as e:
+        logger.error("Failed to get provider stats", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

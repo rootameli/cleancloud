@@ -54,9 +54,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./modules_LeanCloud:/app/modules_LeanCloud
-      - ./app:/app/app
-      - ./app/static:/app/static
     depends_on:
       postgres:
         condition: service_healthy

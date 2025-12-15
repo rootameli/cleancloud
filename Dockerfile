@@ -6,11 +6,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
-    unzip \
-    ca-certificates \
-    grep \
-    coreutils \
-    findutils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install httpx tool
@@ -29,7 +24,6 @@ FROM python:3.12-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy httpx binary from builder
