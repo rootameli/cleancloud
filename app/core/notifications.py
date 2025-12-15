@@ -1,4 +1,4 @@
-"""Notification system for Telegram, Slack, Discord, and webhooks"""
+"""Notification system focused on Telegram delivery (legacy hooks disabled)"""
 
 import asyncio
 import hashlib
@@ -43,116 +43,27 @@ class NotificationManager:
         notification_config = self._get_notification_config()
         
         message = self._format_scan_started_message(scan_result)
-        
-        # Send to all enabled channels
-        tasks = []
-        
+
         if notification_config.telegram_enabled:
-            tasks.append(self._send_telegram(message, notification_config))
-        
-        if notification_config.slack_enabled:
-            tasks.append(self._send_slack(message, notification_config))
-        
-        if notification_config.discord_enabled:
-            tasks.append(self._send_discord(message, notification_config))
-        
-        if notification_config.webhooks_enabled:
-            webhook_data = {
-                "event": "scan.started",
-                "scan_id": scan_result.id,
-                "crack_id": scan_result.crack_id,
-                "data": {
-                    "targets": scan_result.targets,
-                    "concurrency": scan_result.config.concurrency,
-                    "started_at": scan_result.started_at.isoformat() if scan_result.started_at else None
-                }
-            }
-            for webhook_url in notification_config.webhook_urls:
-                tasks.append(self._send_webhook(webhook_url, webhook_data, notification_config))
-        
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await self._send_telegram(message, notification_config)
     
     async def send_scan_completed(self, scan_result: ScanResult):
         """Send scan completed notification"""
         notification_config = self._get_notification_config()
         
         message = self._format_scan_completed_message(scan_result)
-        
-        # Send to all enabled channels
-        tasks = []
-        
+
         if notification_config.telegram_enabled:
-            tasks.append(self._send_telegram(message, notification_config))
-        
-        if notification_config.slack_enabled:
-            tasks.append(self._send_slack(message, notification_config))
-        
-        if notification_config.discord_enabled:
-            tasks.append(self._send_discord(message, notification_config))
-        
-        if notification_config.webhooks_enabled:
-            webhook_data = {
-                "event": "scan.completed",
-                "scan_id": scan_result.id,
-                "crack_id": scan_result.crack_id,
-                "data": {
-                    "status": scan_result.status.value,
-                    "findings_count": scan_result.findings_count,
-                    "hits_count": scan_result.hits_count,
-                    "docker_infected": scan_result.docker_infected,
-                    "k8s_infected": scan_result.k8s_infected,
-                    "completed_at": scan_result.completed_at.isoformat() if scan_result.completed_at else None
-                }
-            }
-            for webhook_url in notification_config.webhook_urls:
-                tasks.append(self._send_webhook(webhook_url, webhook_data, notification_config))
-        
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await self._send_telegram(message, notification_config)
     
     async def send_finding_alert(self, finding: Finding):
         """Send finding alert notification"""
         notification_config = self._get_notification_config()
         
         message = self._format_finding_message(finding)
-        
-        # Send to all enabled channels
-        tasks = []
-        
+
         if notification_config.telegram_enabled:
-            tasks.append(self._send_telegram(message, notification_config))
-        
-        if notification_config.slack_enabled:
-            tasks.append(self._send_slack_finding(finding, notification_config))
-        
-        if notification_config.discord_enabled:
-            tasks.append(self._send_discord_finding(finding, notification_config))
-        
-        if notification_config.webhooks_enabled:
-            webhook_data = {
-                "event": "scan.hit",
-                "scan_id": finding.scan_id,
-                "crack_id": finding.crack_id,
-                "data": {
-                    "hit_id": finding.id,
-                    "service": finding.service,
-                    "works": finding.works,
-                    "confidence": finding.confidence,
-                    "severity": finding.severity,
-                    "source_url": finding.source_url,
-                    "regions": finding.regions,
-                    "capabilities": finding.capabilities,
-                    "masked": True,  # Always mask in webhooks by default
-                    "evidence_masked": finding.evidence_masked,
-                    "created_at": finding.created_at.isoformat()
-                }
-            }
-            for webhook_url in notification_config.webhook_urls:
-                tasks.append(self._send_webhook(webhook_url, webhook_data, notification_config))
-        
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await self._send_telegram(message, notification_config)
     
     def _get_notification_config(self) -> NotificationConfig:
         """Get notification configuration"""
@@ -162,13 +73,13 @@ class NotificationManager:
             telegram_enabled=bool(config.telegram_bot_token and config.telegram_chat_id),
             telegram_bot_token=config.telegram_bot_token,
             telegram_chat_id=config.telegram_chat_id,
-            slack_enabled=bool(config.slack_webhook_url),
-            slack_webhook_url=config.slack_webhook_url,
-            discord_enabled=bool(config.discord_webhook_url),
-            discord_webhook_url=config.discord_webhook_url,
-            webhooks_enabled=bool(config.discord_webhook_url),  # TODO: Fix this
-            webhook_urls=[],  # TODO: Implement webhook URLs list
-            webhook_secret=config.webhook_secret
+            slack_enabled=False,
+            slack_webhook_url=None,
+            discord_enabled=False,
+            discord_webhook_url=None,
+            webhooks_enabled=False,
+            webhook_urls=[],
+            webhook_secret=None
         )
     
     def _format_scan_started_message(self, scan_result: ScanResult) -> str:
@@ -336,7 +247,6 @@ _Scanning in progress..._"""
             payload = {
                 "content": message,
                 "username": "HTTPx Scanner",
-                "avatar_url": "https://example.com/httpx-logo.png"  # TODO: Add actual logo
             }
             
             response = await self.http_client.post(config.discord_webhook_url, json=payload)
@@ -387,7 +297,6 @@ _Scanning in progress..._"""
             payload = {
                 "embeds": [embed],
                 "username": "HTTPx Scanner",
-                "avatar_url": "https://example.com/httpx-logo.png"  # TODO: Add actual logo
             }
             
             response = await self.http_client.post(config.discord_webhook_url, json=payload)

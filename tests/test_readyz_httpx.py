@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from fastapi.testclient import TestClient
+
 from app.main import app
 from app.api import endpoints_enhanced
 from app.core.httpx_executor import httpx_executor

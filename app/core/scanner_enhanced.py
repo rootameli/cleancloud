@@ -15,12 +15,13 @@ from asyncio_throttle import Throttler
 
 import structlog
 from .models import (
-    ScanRequest, ScanResult, ScanStatus, Finding, SecretPattern, 
+    ScanRequest, ScanResult, ScanStatus, Finding, SecretPattern,
     ScanStats, ScanResourceUsage, ModuleType, ValidationResult,
     ModuleResult, WSEventType
 )
 from .config import config_manager
 from .httpx_executor import httpx_executor
+from .modules_loader import modules_loader
 
 logger = structlog.get_logger()
 
@@ -632,6 +633,20 @@ class EnhancedScanner:
                 patterns.extend(self._get_patterns_for_module(module))
         else:
             patterns = config.default_patterns
+
+        # Include optional patterns coming from external modules if available
+        if modules_loader.is_available():
+            for pattern_data in modules_loader.get_patterns():
+                try:
+                    module_type = ModuleType(pattern_data.get("module_type", ModuleType.GENERIC))
+                except ValueError:
+                    module_type = ModuleType.GENERIC
+                patterns.append(SecretPattern(
+                    name=pattern_data.get("name", "external"),
+                    pattern=pattern_data.get("pattern", ""),
+                    description=pattern_data.get("description", "External pattern"),
+                    module_type=module_type
+                ))
         
         # Add custom regex patterns
         if scan_result.config.regex_rules:
@@ -771,45 +786,115 @@ class EnhancedScanner:
         """Validate AWS credentials"""
         # Extract access key from evidence
         access_key_match = re.search(r'AKIA[0-9A-Z]{16}', evidence)
-        if not access_key_match:
-            return ValidationResult(works=False, confidence=0.1)
-        
-        # TODO: Implement actual AWS STS validation
-        # For now, return mock validation
-        return ValidationResult(
-            works=True,
-            confidence=0.9,
-            regions=["us-east-1"],
-            capabilities=["STS", "S3"],
-            quotas={"max_buckets": 100},
-            verified_identities=["root"]
-        )
-    
+        secret_key_match = re.search(r'(?<![A-Za-z0-9/+=])[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])', evidence)
+        if not access_key_match or not secret_key_match:
+            return ValidationResult(works=False, confidence=0.1, error_message="Incomplete AWS credential pair")
+
+        config = config_manager.get_config()
+        if not config.enable_active_validation:
+            return ValidationResult(
+                works=False,
+                confidence=0.4,
+                capabilities=["format_valid"],
+                error_message="Active validation disabled"
+            )
+
+        allowlist = config.validation_allowlist.get("aws", [])
+        access_key = access_key_match.group(0)
+        if allowlist and access_key not in allowlist:
+            return ValidationResult(
+                works=False,
+                confidence=0.3,
+                capabilities=["format_valid"],
+                error_message="Access key not in validation allowlist"
+            )
+
+        try:
+            import boto3  # type: ignore
+
+            sts = boto3.client(
+                "sts",
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key_match.group(0)
+            )
+            identity = sts.get_caller_identity()
+            return ValidationResult(
+                works=True,
+                confidence=0.9,
+                regions=["global"],
+                capabilities=["sts:GetCallerIdentity"],
+                quotas={},
+                verified_identities=[identity.get("Arn", "arn:aws:unknown")]
+            )
+        except ImportError:
+            logger.info("boto3 not installed; skipping AWS active validation")
+            return ValidationResult(
+                works=False,
+                confidence=0.4,
+                capabilities=["format_valid"],
+                error_message="boto3 missing"
+            )
+        except Exception as e:
+            logger.warning("AWS validation failed", error=str(e))
+            return ValidationResult(
+                works=False,
+                confidence=0.4,
+                capabilities=["format_valid"],
+                error_message=str(e)
+            )
+
     async def _validate_sendgrid_key(self, evidence: str) -> ValidationResult:
         """Validate SendGrid API key"""
-        # TODO: Implement actual SendGrid API validation
+        if not evidence.startswith("SG."):
+            return ValidationResult(works=False, confidence=0.1, error_message="Invalid SendGrid prefix")
+
+        config = config_manager.get_config()
+        if not config.enable_active_validation:
+            return ValidationResult(
+                works=False,
+                confidence=0.4,
+                capabilities=["format_valid"],
+                error_message="Active validation disabled"
+            )
+
+        allowlist = config.validation_allowlist.get("sendgrid", [])
+        if allowlist and evidence not in allowlist:
+            return ValidationResult(
+                works=False,
+                confidence=0.3,
+                capabilities=["format_valid"],
+                error_message="Key not in validation allowlist"
+            )
+
+        # No outbound calls by default – treat allowlisted test keys as valid
         return ValidationResult(
             works=True,
-            confidence=0.8,
-            capabilities=["send_email", "manage_templates"]
+            confidence=0.7,
+            capabilities=["allowlisted_test_key"]
         )
-    
+
     async def _validate_docker_api(self, evidence: str) -> ValidationResult:
         """Validate Docker API access"""
-        # TODO: Implement actual Docker API validation
+        if not evidence.startswith("tcp://"):
+            return ValidationResult(works=False, confidence=0.1, error_message="Not a Docker TCP endpoint")
+
         return ValidationResult(
-            works=True,
-            confidence=0.9,
-            capabilities=["container_management"]
+            works=False,
+            confidence=0.4,
+            capabilities=["format_valid"],
+            error_message="Active Docker validation disabled"
         )
-    
+
     async def _validate_k8s_api(self, evidence: str) -> ValidationResult:
         """Validate Kubernetes API access"""
-        # TODO: Implement actual K8s API validation
+        if not evidence.startswith("http"):
+            return ValidationResult(works=False, confidence=0.1, error_message="Invalid Kubernetes endpoint")
+
         return ValidationResult(
-            works=True,
-            confidence=0.9,
-            capabilities=["pod_management"]
+            works=False,
+            confidence=0.4,
+            capabilities=["format_valid"],
+            error_message="Active Kubernetes validation disabled"
         )
     
     def _get_patterns_for_module(self, module_type: ModuleType) -> List[SecretPattern]:
