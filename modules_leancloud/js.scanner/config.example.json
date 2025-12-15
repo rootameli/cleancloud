@@ -1,7 +1,7 @@
 {
   "telegram": {
-    "bot_token": "7619152648:AAFbU49qrbuWiLkz0n9gFiL31Nwyqmm2gKE",
-    "chat_id": "-4735283954"
+    "bot_token": "REPLACE_WITH_BOT_TOKEN",
+    "chat_id": "REPLACE_WITH_CHAT_ID"
   },
   "features": {
     "aws": true,
@@ -18,8 +18,8 @@
     "telnyx": true,
     "github": true,
     "smtp": true,
-    "smtp_test_email": "hk4584711@gmail.com",
-    "ses_exploit_enabled": true,
+    "smtp_test_email": "example@example.com",
+    "ses_exploit_enabled": false,
     "ses_region_override": ""
   },
   "aws_checks": {
@@ -28,6 +28,5 @@
     "fargate": true,
     "federation": false
   },
-  "smtp_test_email": "hk4584711@gmail.com"
+  "smtp_test_email": "example@example.com"
 }
-

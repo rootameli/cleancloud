@@ -1,17 +1,17 @@
 """
-Modules Loader for optional wKayaa/modules_LeanCloud integration
+Modules Loader for optional wKayaa/modules_leancloud integration
 """
 
-import sys
 import importlib
-from typing import Optional, Dict, Any, List
+from pathlib import Path
+from typing import Dict, Any, List
 import structlog
 
 logger = structlog.get_logger()
 
 
 class ModulesLoader:
-    """Loader for optional modules_LeanCloud package"""
+    """Loader for optional modules_leancloud package"""
     
     def __init__(self):
         self.modules_available = False
@@ -19,32 +19,43 @@ class ModulesLoader:
         self.registered_modules = {}
         
     def initialize(self):
-        """Initialize and check for modules_LeanCloud availability"""
+        """Initialize and check for modules_leancloud availability"""
         try:
-            # Try to import modules_LeanCloud
-            import modules_LeanCloud
-            self.modules_package = modules_LeanCloud
+            if not Path("modules_leancloud").exists():
+                logger.info(
+                    "modules_leancloud directory not found - continuing without optional modules"
+                )
+                self.modules_available = False
+                return
+
+            # Try to import the bundled modules_leancloud package if present
+            self.modules_package = importlib.import_module("modules_leancloud")
             self.modules_available = True
-            
-            logger.info("modules_LeanCloud found and loaded", 
-                       version=getattr(modules_LeanCloud, '__version__', 'unknown'))
-            
+
+            logger.info(
+                "modules_leancloud found and loaded",
+                version=getattr(self.modules_package, "__version__", "unknown"),
+            )
+
             # Call register function if available
-            if hasattr(modules_LeanCloud, 'register'):
+            if hasattr(self.modules_package, "register"):
                 try:
-                    self.registered_modules = modules_LeanCloud.register(self)
-                    logger.info("Modules registered successfully", 
-                               count=len(self.registered_modules))
+                    self.registered_modules = self.modules_package.register(self)
+                    logger.info(
+                        "Modules registered successfully", count=len(self.registered_modules)
+                    )
                 except Exception as e:
                     logger.error("Failed to register modules", error=str(e))
             else:
-                logger.warning("modules_LeanCloud found but no register() function")
-                
+                logger.warning("modules_leancloud found but no register() function")
+
         except ImportError:
-            logger.info("modules_LeanCloud not found - continuing without optional modules")
+            logger.info(
+                "modules_leancloud not found - continuing without optional modules"
+            )
             self.modules_available = False
         except Exception as e:
-            logger.error("Error loading modules_LeanCloud", error=str(e))
+            logger.error("Error loading modules_leancloud", error=str(e))
             self.modules_available = False
     
     def is_available(self) -> bool:
@@ -116,20 +127,20 @@ class ModulesLoader:
         return True
     
     def get_installation_instructions(self) -> str:
-        """Get installation instructions for modules_LeanCloud"""
+        """Get installation instructions for modules_leancloud"""
         return """
-To install modules_LeanCloud for enhanced functionality:
+To install modules_leancloud for enhanced functionality:
 
 Option 1: Install from GitHub
-pip install -e git+https://github.com/wKayaa/modules_LeanCloud.git
+pip install -e git+https://github.com/wKayaa/modules_leancloud.git
 
 Option 2: Clone as submodule
-git submodule add https://github.com/wKayaa/modules_LeanCloud.git modules_LeanCloud
+git submodule add https://github.com/wKayaa/modules_leancloud.git modules_leancloud
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 Option 3: Manual installation
-git clone https://github.com/wKayaa/modules_LeanCloud.git
-cd modules_LeanCloud
+git clone https://github.com/wKayaa/modules_leancloud.git
+cd modules_leancloud
 pip install -e .
 
 After installation, restart the application to load the modules.

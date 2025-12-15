@@ -199,7 +199,7 @@ class ScanResourceUsage(BaseModel):
 
 class ConfigModel(BaseModel):
     auth_required: bool = Field(default=True)
-    secret_key: str = Field(default="change-me-in-production") 
+    secret_key: str = Field(default="httpx-scanner-change-me-in-production")
     first_run: bool = Field(default=True)
     rate_limit_per_minute: int = Field(default=60)
     max_scan_retention_days: int = Field(default=30)
@@ -212,6 +212,10 @@ class ConfigModel(BaseModel):
     enable_backpressure: bool = Field(default=True)
     queue_max_size: int = Field(default=100000)
     batch_size: int = Field(default=1000)
+
+    # Validation controls
+    enable_active_validation: bool = Field(default=False)
+    validation_allowlist: Dict[str, List[str]] = Field(default_factory=dict)
     
     # Database settings
     database_url: Optional[str] = Field(default=None)
@@ -220,8 +224,10 @@ class ConfigModel(BaseModel):
     # Notification settings
     telegram_bot_token: Optional[str] = Field(default=None)
     telegram_chat_id: Optional[str] = Field(default=None)
+    # Deprecated legacy channels (kept for config compatibility)
     slack_webhook_url: Optional[str] = Field(default=None)
     discord_webhook_url: Optional[str] = Field(default=None)
+    webhook_urls: List[str] = Field(default_factory=list)
     webhook_secret: Optional[str] = Field(default=None)
 
 
@@ -234,7 +240,7 @@ class NotificationConfig(BaseModel):
     discord_enabled: bool = False
     discord_webhook_url: Optional[str] = None
     webhooks_enabled: bool = False
-    webhook_urls: List[str] = Field(default=[])
+    webhook_urls: List[str] = Field(default_factory=list)
     webhook_secret: Optional[str] = None
 
 
