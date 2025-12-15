@@ -170,6 +170,9 @@ class ConfigManager:
             enable_backpressure=True,
             queue_max_size=100000,
             batch_size=1000,
+
+            enable_active_validation=False,
+            validation_allowlist={},
             
             # Database and Redis
             database_url="postgresql+asyncpg://httpx:httpx@localhost:5432/httpx_scanner",
@@ -180,6 +183,7 @@ class ConfigManager:
             telegram_chat_id=None,
             slack_webhook_url=None,
             discord_webhook_url=None,
+            webhook_urls=[],
             webhook_secret=None
         )
     
@@ -272,12 +276,7 @@ class ConfigManager:
         """Check if notification channel is enabled"""
         if channel == "telegram":
             return bool(self.config.telegram_bot_token and self.config.telegram_chat_id)
-        elif channel == "slack":
-            return bool(self.config.slack_webhook_url)
-        elif channel == "discord":
-            return bool(self.config.discord_webhook_url)
-        elif channel == "webhook":
-            return bool(self.config.webhook_secret)
+        # Legacy channels are intentionally disabled for safety
         return False
     
     def validate_config(self) -> List[str]:
@@ -285,7 +284,7 @@ class ConfigManager:
         issues = []
         
         # Check required fields
-        if not self.config.secret_key or self.config.secret_key == "change-me-in-production":
+        if not self.config.secret_key or "change-me-in-production" in self.config.secret_key:
             issues.append("Secret key should be changed from default value")
         
         # Check concurrency limits

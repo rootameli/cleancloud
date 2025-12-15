@@ -21,6 +21,7 @@ from .models import (
 )
 from .config import config_manager
 from .httpx_executor import httpx_executor
+from .modules_loader import modules_loader
 
 logger = structlog.get_logger()
 
@@ -632,7 +633,21 @@ class EnhancedScanner:
                 patterns.extend(self._get_patterns_for_module(module))
         else:
             patterns = config.default_patterns
-        
+
+        # Include optional patterns coming from external modules if available
+        if modules_loader.is_available():
+            for pattern_data in modules_loader.get_patterns():
+                try:
+                    module_type = ModuleType(pattern_data.get("module_type", ModuleType.GENERIC))
+                except ValueError:
+                    module_type = ModuleType.GENERIC
+                patterns.append(SecretPattern(
+                    name=pattern_data.get("name", "external"),
+                    pattern=pattern_data.get("pattern", ""),
+                    description=pattern_data.get("description", "External pattern"),
+                    module_type=module_type
+                ))
+
         # Add custom regex patterns
         if scan_result.config.regex_rules:
             for regex in scan_result.config.regex_rules:
