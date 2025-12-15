@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 import structlog
+import uuid
 
 from ..core.auth import get_current_user, require_admin
 from ..core.database import get_db_session, ScanDB, FindingDB, EventDB, AuditLogDB, ListDB
@@ -334,47 +335,39 @@ async def control_scan(scan_id: str, control_request: ScanControlRequest) -> Dic
 @router.get("/scans/{scan_id}/logs", dependencies=[Depends(get_current_user)])
 async def get_scan_logs(
     scan_id: str,
-    tail: int = Query(500, ge=1, le=5000, description="Number of recent log lines to return")
+    tail: int = Query(500, ge=1, le=5000, description="Number of recent log lines to return"),
+    session: AsyncSession = Depends(get_db_session)
 ) -> Dict[str, Any]:
     """Get recent logs for a scan"""
     try:
-        # For now, return basic info - logs would come from WebSocket in real implementation
-        # This endpoint provides fallback access when WebSocket isn't available
-        scan_result = enhanced_scanner.get_scan_result(scan_id)
-        if not scan_result:
+        # Validate scan exists
+        try:
+            scan_uuid = uuid.UUID(scan_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid scan ID format")
+
+        scan = await session.get(ScanDB, scan_uuid)
+        if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
-        
-        # Get httpx executor stats if available
-        stats = httpx_executor.get_scan_stats(scan_id)
-        
-        logs = []
-        if scan_result.status == ScanStatus.RUNNING:
-            logs.append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "level": "info",
-                "message": f"Scan is running - processed {scan_result.processed_urls} URLs"
-            })
-            
-            if stats:
-                logs.append({
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "level": "info", 
-                    "message": f"Performance: {stats.get('processed_urls', 0)} URLs processed, "
-                              f"{stats.get('hits', 0)} hits, {stats.get('errors', 0)} errors"
-                })
-        elif scan_result.status == ScanStatus.COMPLETED:
-            logs.append({
-                "timestamp": scan_result.completed_at.isoformat() if scan_result.completed_at else datetime.now(timezone.utc).isoformat(),
-                "level": "info",
-                "message": f"Scan completed - {scan_result.findings_count} findings"
-            })
-        elif scan_result.status == ScanStatus.FAILED:
-            logs.append({
-                "timestamp": scan_result.completed_at.isoformat() if scan_result.completed_at else datetime.now(timezone.utc).isoformat(),
-                "level": "error",
-                "message": f"Scan failed: {scan_result.error_message or 'Unknown error'}"
-            })
-        
+
+        query = (
+            select(EventDB)
+            .where(EventDB.scan_id == scan_uuid)
+            .order_by(EventDB.created_at.asc())
+        )
+        result = await session.execute(query)
+        events: List[EventDB] = result.scalars().all()
+
+        logs = [
+            {
+                "timestamp": event.created_at.isoformat(),
+                "level": event.data.get("level", "info") if isinstance(event.data, dict) else "info",
+                "message": event.data.get("message") if isinstance(event.data, dict) else str(event.data),
+                "module_id": event.data.get("module_id") if isinstance(event.data, dict) else None,
+            }
+            for event in events
+        ]
+
         return {
             "scan_id": scan_id,
             "logs": logs[-tail:],  # Return last N entries

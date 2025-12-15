@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 from typing import Dict, List, Set, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect
 import structlog
+from sqlalchemy import select, func
 
 from ..core.auth import auth_manager
 from ..core.redis_manager import get_redis
 from ..core.models import WSEventType, WebSocketMessage
 from ..core.metrics import metrics
 from ..core.scanner_enhanced import enhanced_scanner
+from ..core.database import get_async_session, ScanDB, FindingDB, EventDB
 
 logger = structlog.get_logger()
 
@@ -386,6 +388,36 @@ async def websocket_scan_endpoint(websocket: WebSocket, scan_id: str, token: str
         manager.disconnect(websocket)
 
 
+async def get_dashboard_stats() -> Dict[str, Any]:
+    """Build dashboard stats from database and in-memory state."""
+
+    session_factory = get_async_session()
+    async with session_factory() as session:
+        provider_query = select(FindingDB.service, func.count(FindingDB.id)).group_by(FindingDB.service)
+        provider_rows = await session.execute(provider_query)
+        provider_counts = dict(provider_rows.fetchall())
+        expected_providers = ['aws', 'sendgrid', 'sparkpost', 'twilio', 'brevo', 'mailgun']
+        provider_stats = {k: provider_counts.get(k, 0) for k in expected_providers}
+
+        findings_total_row = await session.execute(select(func.count(FindingDB.id)))
+        total_findings = findings_total_row.scalar() or 0
+
+        event_count_row = await session.execute(select(func.count(EventDB.id)))
+        total_events = event_count_row.scalar() or 0
+
+        running_row = await session.execute(
+            select(func.count(ScanDB.id)).where(ScanDB.status == "running")
+        )
+        running = running_row.scalar() or 0
+
+    return {
+        "provider_hits": provider_stats,
+        "total_findings": total_findings,
+        "events": total_events,
+        "active_scans": running,
+    }
+
+
 async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
     """WebSocket endpoint for dashboard events"""
     user_id = None
@@ -405,25 +437,13 @@ async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
     try:
         # Send initial dashboard stats with French UI support
         connection_stats = await manager.get_connection_stats()
-        
-        # Get provider stats for tiles
-        from .results import get_provider_stats
-        try:
-            # Mock session for now - in real implementation use proper session
-            provider_stats = {
-                'aws': 0, 'sendgrid': 0, 'sparkpost': 0, 
-                'twilio': 0, 'brevo': 0, 'mailgun': 0
-            }
-        except:
-            provider_stats = {
-                'aws': 0, 'sendgrid': 0, 'sparkpost': 0, 
-                'twilio': 0, 'brevo': 0, 'mailgun': 0
-            }
-        
+
+        dash_stats = await get_dashboard_stats()
+
         scan_stats = {
-            "active_scans": len(enhanced_scanner.active_scans),
-            "total_findings": sum(len(findings) for findings in enhanced_scanner.findings.values()),
-            "provider_hits": provider_stats,
+            "active_scans": dash_stats.get("active_scans", 0),
+            "total_findings": dash_stats.get("total_findings", 0),
+            "provider_hits": dash_stats.get("provider_hits", {}),
             # French UI specific metrics
             "processed_urls": 0,
             "total_urls": 0,
@@ -432,7 +452,8 @@ async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
             "https_reqs_per_sec": 0.0,
             "precision_percent": 0.0,
             "duration_seconds": 0.0,
-            "eta_seconds": None
+            "eta_seconds": None,
+            "events": dash_stats.get("events", 0),
         }
         
         initial_message = {
