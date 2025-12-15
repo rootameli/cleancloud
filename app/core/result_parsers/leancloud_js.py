@@ -30,26 +30,54 @@ async def parse_leancloud_js(scan_id: str, module_id: str, output_paths: Dict[st
             await persist_log_event(scan_id, "Scan not found for parser", "error", module_id)
             return []
 
-        for file_name in ["dir_keys.txt", "env_keys.txt", "twilio_credentials.txt"]:
-            file_path = result_dir / file_name
-            if not file_path.exists():
-                continue
+        txt_files = sorted(result_dir.glob("*.txt"))
+        for file_path in txt_files:
+            file_name = file_path.name
+            stem = file_path.stem.lower()
+
+            # Deduce service/type from filename heuristics
+            service = "generic"
+            for candidate in [
+                "aws",
+                "sendgrid",
+                "sparkpost",
+                "twilio",
+                "brevo",
+                "mailgun",
+                "github",
+                "gitlab",
+                "slack",
+                "stripe",
+                "gcp",
+                "azure",
+            ]:
+                if candidate in stem:
+                    service = candidate
+                    break
+
+            category = "generic"
+            if "credential" in stem:
+                category = "credentials"
+            elif "key" in stem:
+                category = "api_key"
+            elif "env" in stem:
+                category = "env_secret"
 
             for line in file_path.read_text().splitlines():
-                if ":" not in line:
+                content = line.strip()
+                if not content:
                     continue
-                url, evidence = line.rsplit(":", 1)
                 finding = FindingDB(
                     scan_id=scan_db.id,
                     crack_id=scan_db.crack_id,
-                    service="generic",
-                    pattern_id=file_name,
-                    url=url,
-                    source_url=url,
+                    service=service,
+                    pattern_id=f"{file_name}:{category}",
+                    url=content,
+                    source_url=content,
                     first_seen=datetime.now(timezone.utc),
                     last_seen=datetime.now(timezone.utc),
-                    evidence=evidence,
-                    evidence_masked=evidence,
+                    evidence=f"{file_name}: {content} (scan={scan_id}, module={module_id})",
+                    evidence_masked=f"{file_name}: {content}",
                     works=False,
                     confidence=0.5,
                     severity="medium",

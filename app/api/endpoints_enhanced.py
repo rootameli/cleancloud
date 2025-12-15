@@ -336,6 +336,8 @@ async def control_scan(scan_id: str, control_request: ScanControlRequest) -> Dic
 async def get_scan_logs(
     scan_id: str,
     tail: int = Query(500, ge=1, le=5000, description="Number of recent log lines to return"),
+    limit: int | None = Query(None, ge=1, le=5000, description="Maximum logs to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     session: AsyncSession = Depends(get_db_session)
 ) -> Dict[str, Any]:
     """Get recent logs for a scan"""
@@ -350,12 +352,27 @@ async def get_scan_logs(
         if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
 
-        query = (
+        # Coerce Query objects when called directly in tests
+        if not isinstance(limit, (int, type(None))):
+            limit = None
+        if not isinstance(offset, int):
+            offset = 0
+
+        base_query = (
             select(EventDB)
             .where(EventDB.scan_id == scan_uuid)
             .order_by(EventDB.created_at.asc())
         )
-        result = await session.execute(query)
+
+        count_result = await session.execute(
+            select(func.count(EventDB.id)).where(EventDB.scan_id == scan_uuid)
+        )
+        total_count = count_result.scalar() or 0
+
+        if limit is not None:
+            result = await session.execute(base_query.limit(limit).offset(offset))
+        else:
+            result = await session.execute(base_query)
         events: List[EventDB] = result.scalars().all()
 
         logs = [
@@ -370,8 +387,10 @@ async def get_scan_logs(
 
         return {
             "scan_id": scan_id,
-            "logs": logs[-tail:],  # Return last N entries
-            "total_logs": len(logs)
+            "logs": logs[-tail:] if limit is None else logs,
+            "total_logs": total_count if limit is not None else len(logs),
+            "offset": offset,
+            "limit": limit,
         }
         
     except HTTPException:

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import shutil
 import uuid
 import time
 from pathlib import Path
@@ -60,10 +61,26 @@ async def run_module(
     if not module_def:
         raise HTTPException(status_code=404, detail=f"Unknown module {module_id}")
 
-    work_base = Path("data/scans") / scan_id / module_def.id
-    work_base.mkdir(parents=True, exist_ok=True)
+    resolved_working_dir = module_def.working_dir
+    main_file = resolved_working_dir / "main.go"
+    if not resolved_working_dir.exists() or not main_file.exists():
+        await _persist_event(
+            scan_id,
+            "error",
+            f"Module path invalid for {module_id}: {resolved_working_dir}",
+            module_id,
+        )
+        raise HTTPException(status_code=500, detail=f"Module path missing for {module_id}")
 
-    targets_file = work_base / "targets.txt"
+    base_dir = Path("data/scans") / scan_id / module_def.id
+    work_dir = base_dir / "work"
+    result_dir = work_dir / module_def.output_paths.get("result_dir", "ResultJS")
+    if result_dir.exists():
+        shutil.rmtree(result_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    result_dir.mkdir(parents=True, exist_ok=True)
+
+    targets_file = work_dir / "targets.txt"
     targets_file.write_text("\n".join(targets))
 
     env = os.environ.copy()
@@ -73,12 +90,17 @@ async def run_module(
     })
     env.update({k: str(v) for k, v in settings.items()})
 
-    await _persist_event(scan_id, "info", f"Starting module {module_def.display_name}", module_id)
+    await _persist_event(
+        scan_id,
+        "info",
+        f"module_started: {module_def.display_name}",
+        module_id,
+    )
 
     start_time = time.monotonic()
     process = await asyncio.create_subprocess_exec(
         *module_def.entrypoint,
-        cwd=str(module_def.working_dir),
+        cwd=str(work_dir),
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -100,16 +122,19 @@ async def run_module(
     duration = time.monotonic() - start_time
 
     output_paths = {
-        name: str(Path(module_def.working_dir) / relative)
+        name: str(result_dir if name == "result_dir" else Path(work_dir) / relative)
         for name, relative in module_def.output_paths.items()
     }
 
     await _persist_event(
         scan_id,
         "info",
-        f"Module {module_def.display_name} finished with code {process.returncode}",
+        f"module_finished: {module_def.display_name} (code {process.returncode})",
         module_id,
     )
+
+    if process.returncode != 0:
+        await _persist_event(scan_id, "error", f"module_failed: {module_id}", module_id)
 
     return {
         "returncode": process.returncode,

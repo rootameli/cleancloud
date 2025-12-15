@@ -22,8 +22,10 @@ MODULES_REGISTRY: Dict[str, ModuleDefinition] = {
         id="leancloud_js",
         display_name="LeanCloud JS Scanner",
         type="subprocess",
-        working_dir=Path(os.getenv("LEAN_MODULE_PATH", "Modules_CleanCloud/js.scanner")),
-        entrypoint=["go", "run", "main.go"],
+        working_dir=(
+            Path(os.getenv("LEAN_MODULE_PATH", "modules_leancloud")) / "js.scanner"
+        ).resolve(),
+        entrypoint=["go", "run", str((Path(os.getenv("LEAN_MODULE_PATH", "modules_leancloud")) / "js.scanner" / "main.go").resolve())],
         timeout=600,
         output_paths={"result_dir": "ResultJS"},
     ),

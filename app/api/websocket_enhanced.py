@@ -410,11 +410,29 @@ async def get_dashboard_stats() -> Dict[str, Any]:
         )
         running = running_row.scalar() or 0
 
+        latest_scan_row = await session.execute(
+            select(ScanDB).order_by(ScanDB.created_at.desc()).limit(1)
+        )
+        latest_scan = latest_scan_row.scalars().first()
+        total_urls = 0
+        processed_urls = 0
+        progress_percent = 0.0
+
+        if latest_scan:
+            total_urls = latest_scan.total_urls or len(latest_scan.targets or [])
+            processed_urls = latest_scan.processed_urls or 0
+            if latest_scan.status in {"completed", "failed"} and processed_urls == 0:
+                processed_urls = total_urls
+            progress_percent = (processed_urls / total_urls * 100) if total_urls else 0.0
+
     return {
         "provider_hits": provider_stats,
         "total_findings": total_findings,
         "events": total_events,
         "active_scans": running,
+        "processed_urls": processed_urls,
+        "total_urls": total_urls,
+        "progress_percent": progress_percent,
     }
 
 
@@ -445,9 +463,9 @@ async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
             "total_findings": dash_stats.get("total_findings", 0),
             "provider_hits": dash_stats.get("provider_hits", {}),
             # French UI specific metrics
-            "processed_urls": 0,
-            "total_urls": 0,
-            "progress_percent": 0.0,
+            "processed_urls": dash_stats.get("processed_urls", 0),
+            "total_urls": dash_stats.get("total_urls", 0),
+            "progress_percent": dash_stats.get("progress_percent", 0.0),
             "urls_per_sec": 0.0,
             "https_reqs_per_sec": 0.0,
             "precision_percent": 0.0,

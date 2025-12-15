@@ -320,7 +320,8 @@ class EnhancedScanner:
                     follow_redirects=scan_request.follow_redirects,
                     regex_rules=scan_request.regex_rules,
                     path_rules=scan_request.path_rules,
-                    notes=scan_request.notes
+                    notes=scan_request.notes,
+                    total_urls=len(scan_request.targets),
                 )
                 session.add(db_scan)
                 await session.commit()
@@ -360,6 +361,11 @@ class EnhancedScanner:
                     f"Module {module_id} ended with code {result.get('returncode')}",
                     "info",
                     module_id,
+                )
+                await self._update_scan_record(
+                    scan_id,
+                    processed_urls=len(scan_result.config.targets),
+                    progress_percent=100.0,
                 )
             except Exception as exc:  # noqa: BLE001
                 await persist_log_event(scan_id, f"Module {module_id} failed: {exc}", "error", module_id)
