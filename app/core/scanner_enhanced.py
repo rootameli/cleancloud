@@ -21,6 +21,10 @@ from .models import (
 )
 from .config import config_manager
 from .httpx_executor import httpx_executor
+from .module_runner import run_module, persist_log_event
+from .modules_registry import module_id_for_type
+from .result_parsers import get_parser
+from .database import ScanDB, get_async_session
 
 logger = structlog.get_logger()
 
@@ -204,9 +208,22 @@ class EnhancedScanner:
         self.stats_managers: Dict[str, StatsManager] = {}
         self.concurrency_managers: Dict[str, ConcurrencyManager] = {}
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
-        
+
         # HTTP client with connection pooling
         self.http_client: Optional[httpx.AsyncClient] = None
+
+    async def _update_scan_record(self, scan_id: str, **fields):
+        """Persist scan status/metrics updates."""
+
+        session_factory = get_async_session()
+        async with session_factory() as session:
+            db_scan = await session.get(ScanDB, uuid.UUID(scan_id))
+            if not db_scan:
+                return
+            for key, value in fields.items():
+                if hasattr(db_scan, key):
+                    setattr(db_scan, key, value)
+            await session.commit()
         
     async def initialize(self):
         """Initialize the scanner"""
@@ -284,7 +301,7 @@ class EnhancedScanner:
         # Start scan task
         task = asyncio.create_task(self._run_scan(scan_id))
         self.scan_tasks[scan_id] = task
-        
+
         # Store in database if available
         try:
             from .database import get_async_session, ScanDB
@@ -309,11 +326,44 @@ class EnhancedScanner:
                 await session.commit()
         except Exception as e:
             logger.warning("Failed to store scan in database", error=str(e))
-        
-        logger.info("Scan started", scan_id=scan_id, crack_id=crack_id, 
+
+        logger.info("Scan started", scan_id=scan_id, crack_id=crack_id,
                    targets=len(scan_request.targets), concurrency=scan_request.concurrency)
-        
+
         return scan_id
+
+    async def _run_modules_for_scan(self, scan_id: str) -> None:
+        """Execute registered modules for a scan."""
+
+        scan_result = self.active_scans.get(scan_id)
+        if not scan_result:
+            return
+
+        modules = scan_result.config.modules or [ModuleType.GENERIC]
+        for module in modules:
+            module_id = module_id_for_type(module.value if hasattr(module, "value") else str(module))
+            if not module_id:
+                continue
+
+            try:
+                await persist_log_event(scan_id, f"Launching module {module_id}", "info", module_id)
+                result = await run_module(scan_id, module_id, scan_result.config.targets, {})
+
+                parser = get_parser(module_id)
+                if parser:
+                    findings = await parser(scan_id, module_id, result.get("output_paths", {}))
+                    current = getattr(scan_result, "findings_count", 0)
+                    scan_result.findings_count = current + len(findings)
+                    await self._update_scan_record(scan_id, findings_count=scan_result.findings_count)
+                await persist_log_event(
+                    scan_id,
+                    f"Module {module_id} ended with code {result.get('returncode')}",
+                    "info",
+                    module_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                await persist_log_event(scan_id, f"Module {module_id} failed: {exc}", "error", module_id)
+                raise
     
     async def _run_scan(self, scan_id: str):
         """Execute scan using httpx CLI executor"""
@@ -321,7 +371,12 @@ class EnhancedScanner:
             scan_result = self.active_scans[scan_id]
             scan_result.status = ScanStatus.RUNNING
             scan_result.started_at = datetime.now(timezone.utc)
-            
+            await self._update_scan_record(
+                scan_id,
+                status=ScanStatus.RUNNING.value,
+                started_at=scan_result.started_at,
+            )
+
             # Broadcast scan started
             await self._broadcast_scan_event(scan_id, WSEventType.SCAN_STATUS, {
                 "status": ScanStatus.RUNNING.value,
@@ -359,9 +414,16 @@ class EnhancedScanner:
             
             # Mark scan as completed
             if success:
+                await self._run_modules_for_scan(scan_id)
                 scan_result.status = ScanStatus.COMPLETED
                 scan_result.completed_at = datetime.now(timezone.utc)
-                
+                await self._update_scan_record(
+                    scan_id,
+                    status=ScanStatus.COMPLETED.value,
+                    completed_at=scan_result.completed_at,
+                    findings_count=scan_result.findings_count,
+                )
+
                 await self._broadcast_scan_event(scan_id, WSEventType.SCAN_STATUS, {
                     "status": ScanStatus.COMPLETED.value,
                     "completed_at": scan_result.completed_at.isoformat()
@@ -373,26 +435,43 @@ class EnhancedScanner:
                 scan_result.status = ScanStatus.FAILED
                 scan_result.error_message = "httpx execution failed"
                 scan_result.completed_at = datetime.now(timezone.utc)
-                
+                await self._update_scan_record(
+                    scan_id,
+                    status=ScanStatus.FAILED.value,
+                    completed_at=scan_result.completed_at,
+                    error_message=scan_result.error_message,
+                )
+
                 logger.error("Scan failed", scan_id=scan_id)
-            
+
         except asyncio.CancelledError:
             logger.info("Scan cancelled", scan_id=scan_id)
             scan_result.status = ScanStatus.STOPPED
             scan_result.stopped_at = datetime.now(timezone.utc)
-            
+            await self._update_scan_record(
+                scan_id,
+                status=ScanStatus.STOPPED.value,
+                stopped_at=scan_result.stopped_at,
+            )
+
             # Stop httpx process
             await httpx_executor.stop_scan(scan_id)
-            
+
         except Exception as e:
             logger.error("Scan failed", scan_id=scan_id, error=str(e))
             scan_result.status = ScanStatus.FAILED
             scan_result.error_message = str(e)
             scan_result.completed_at = datetime.now(timezone.utc)
+            await self._update_scan_record(
+                scan_id,
+                status=ScanStatus.FAILED.value,
+                completed_at=scan_result.completed_at,
+                error_message=scan_result.error_message,
+            )
         finally:
             # Cleanup
             self.stats_managers.pop(scan_id, None)
-            self.concurrency_managers.pop(scan_id, None) 
+            self.concurrency_managers.pop(scan_id, None)
             self.circuit_breakers.pop(scan_id, None)
             self.scan_tasks.pop(scan_id, None)
     

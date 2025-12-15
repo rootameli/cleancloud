@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # Development
     debug: bool = Field(default=False, env="DEBUG")
     reload: bool = Field(default=False, env="RELOAD")
+    lab_mode: bool = Field(default=False, env="LAB_MODE")
     
     # Application State
     first_run: bool = Field(default=True)
