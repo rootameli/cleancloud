@@ -1,1 +1,0 @@
-for i in $(ls split*); do nohup python3 vuln.py $i & done

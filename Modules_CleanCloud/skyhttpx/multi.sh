@@ -1,1 +1,0 @@
-for i in $(ls split*); do nohup sh dumper.sh $i & done

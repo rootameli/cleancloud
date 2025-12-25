@@ -24,7 +24,7 @@ default_patterns:
 - description: AWS SES SMTP Endpoint
   name: AWS SES SMTP
   pattern: email-smtp\.(us|eu|ap|ca|cn|sa)-(central|(north|south)?(west|east)?)-[0-9]{1}\.amazonaws\.com
-first_run: false
+first_run: true
 httpx_path: httpx
 max_scan_retention_days: 30
 rate_limit_per_minute: 60

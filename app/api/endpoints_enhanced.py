@@ -13,7 +13,6 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 import structlog
-import uuid
 
 from ..core.auth import get_current_user, require_admin
 from ..core.database import get_db_session, ScanDB, FindingDB, EventDB, AuditLogDB, ListDB
@@ -335,62 +334,51 @@ async def control_scan(scan_id: str, control_request: ScanControlRequest) -> Dic
 @router.get("/scans/{scan_id}/logs", dependencies=[Depends(get_current_user)])
 async def get_scan_logs(
     scan_id: str,
-    tail: int = Query(500, ge=1, le=5000, description="Number of recent log lines to return"),
-    limit: int | None = Query(None, ge=1, le=5000, description="Maximum logs to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
-    session: AsyncSession = Depends(get_db_session)
+    tail: int = Query(500, ge=1, le=5000, description="Number of recent log lines to return")
 ) -> Dict[str, Any]:
     """Get recent logs for a scan"""
     try:
-        # Validate scan exists
-        try:
-            scan_uuid = uuid.UUID(scan_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid scan ID format")
-
-        scan = await session.get(ScanDB, scan_uuid)
-        if not scan:
+        # For now, return basic info - logs would come from WebSocket in real implementation
+        # This endpoint provides fallback access when WebSocket isn't available
+        scan_result = enhanced_scanner.get_scan_result(scan_id)
+        if not scan_result:
             raise HTTPException(status_code=404, detail="Scan not found")
-
-        # Coerce Query objects when called directly in tests
-        if not isinstance(limit, (int, type(None))):
-            limit = None
-        if not isinstance(offset, int):
-            offset = 0
-
-        base_query = (
-            select(EventDB)
-            .where(EventDB.scan_id == scan_uuid)
-            .order_by(EventDB.created_at.asc())
-        )
-
-        count_result = await session.execute(
-            select(func.count(EventDB.id)).where(EventDB.scan_id == scan_uuid)
-        )
-        total_count = count_result.scalar() or 0
-
-        if limit is not None:
-            result = await session.execute(base_query.limit(limit).offset(offset))
-        else:
-            result = await session.execute(base_query)
-        events: List[EventDB] = result.scalars().all()
-
-        logs = [
-            {
-                "timestamp": event.created_at.isoformat(),
-                "level": event.data.get("level", "info") if isinstance(event.data, dict) else "info",
-                "message": event.data.get("message") if isinstance(event.data, dict) else str(event.data),
-                "module_id": event.data.get("module_id") if isinstance(event.data, dict) else None,
-            }
-            for event in events
-        ]
-
+        
+        # Get httpx executor stats if available
+        stats = httpx_executor.get_scan_stats(scan_id)
+        
+        logs = []
+        if scan_result.status == ScanStatus.RUNNING:
+            logs.append({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": "info",
+                "message": f"Scan is running - processed {scan_result.processed_urls} URLs"
+            })
+            
+            if stats:
+                logs.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info", 
+                    "message": f"Performance: {stats.get('processed_urls', 0)} URLs processed, "
+                              f"{stats.get('hits', 0)} hits, {stats.get('errors', 0)} errors"
+                })
+        elif scan_result.status == ScanStatus.COMPLETED:
+            logs.append({
+                "timestamp": scan_result.completed_at.isoformat() if scan_result.completed_at else datetime.now(timezone.utc).isoformat(),
+                "level": "info",
+                "message": f"Scan completed - {scan_result.findings_count} findings"
+            })
+        elif scan_result.status == ScanStatus.FAILED:
+            logs.append({
+                "timestamp": scan_result.completed_at.isoformat() if scan_result.completed_at else datetime.now(timezone.utc).isoformat(),
+                "level": "error",
+                "message": f"Scan failed: {scan_result.error_message or 'Unknown error'}"
+            })
+        
         return {
             "scan_id": scan_id,
-            "logs": logs[-tail:] if limit is None else logs,
-            "total_logs": total_count if limit is not None else len(logs),
-            "offset": offset,
-            "limit": limit,
+            "logs": logs[-tail:],  # Return last N entries
+            "total_logs": len(logs)
         }
         
     except HTTPException:

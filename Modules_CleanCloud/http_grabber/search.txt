@@ -1,1 +1,0 @@
-regex_first_key:AKIA regex:([^A-Z0-9]|^)(AKIA|A3T|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{12,}
