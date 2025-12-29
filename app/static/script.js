@@ -32,8 +32,9 @@ function initializeApp() {
     // Initialize UI components
     initializeUIComponents();
     
-    // Initialize lists cache and populate selectors
-    loadLists();
+// Initialize lists cache and populate selectors (only after auth)
+    if (authToken) {
+        loadLists();
 }
 
 function setupEventListeners() {
@@ -179,7 +180,7 @@ async function handleLogin(e) {
             authToken = data.access_token;
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
-            isFirstLogin = data.first_login || false;
+            isFirstLogin = data.first_run || false;
             
             if (isFirstLogin) {
                 showPasswordChange();
@@ -1249,6 +1250,11 @@ function attachScanFormGating() {
 let cachedLists = [];
 
 async function loadLists() {
+     if (!authToken) {
+        console.warn('loadLists skipped: no authToken');
+        return;
+    }
+    
     try {
         const response = await fetch(`${API_BASE}/lists`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
@@ -1658,6 +1664,11 @@ async function loadSettings() {
         
         if (response.ok) {
             const settings = await response.json();
+            function displaySettings(settings) {
+    // Minimal safe renderer to avoid breaking the Settings tab
+    // We only stop the crash here; actual field mapping can be done next.
+        console.log('Settings loaded:', settings);
+}
             displaySettings(settings);
         }
     } catch (error) {
