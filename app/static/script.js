@@ -1683,15 +1683,14 @@ async function loadSettings() {
         const response = await fetch(`${API_BASE}/settings`, {
             headers: getAuthHeaders()
         });
-        
+
         if (response.ok) {
             const settings = await response.json();
-            function displaySettings(settings) {
-    // Minimal safe renderer to avoid breaking the Settings tab
-    // We only stop the crash here; actual field mapping can be done next.
-        console.log('Settings loaded:', settings);
-}
-            displaySettings(settings);
+            if (typeof displaySettings === 'function') {
+                displaySettings(settings);
+            } else {
+                console.warn('displaySettings is not available; skipping render.');
+            }
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
