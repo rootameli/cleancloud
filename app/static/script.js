@@ -18,8 +18,19 @@ function sanitizeAuthToken(token) {
     return token;
 }
 
+function getValidAuthToken() {
+    const stored = sanitizeAuthToken(authToken ?? localStorage.getItem('authToken'));
+    if (!stored) {
+        authToken = null;
+        localStorage.removeItem('authToken');
+        return null;
+    }
+    authToken = stored;
+    return stored;
+}
+
 function getAuthHeaders(extraHeaders = {}) {
-    const token = sanitizeAuthToken(authToken);
+    const token = getValidAuthToken();
     if (!token) {
         return { ...extraHeaders };
     }
@@ -39,7 +50,7 @@ function initializeApp() {
     console.log('🚀 Initializing HTTPx Cloud Scanner...');
     
     // Check authentication status
-    if (authToken) {
+    if (getValidAuthToken()) {
         verifyTokenAndShowApp();
     } else {
         showLogin();
@@ -51,10 +62,7 @@ function initializeApp() {
     // Initialize UI components
     initializeUIComponents();
 
-    // Initialize lists cache and populate selectors
-    if (authToken) {
-        loadLists();
-    }
+    // Do not load protected resources until authentication is confirmed
 }
 
 function setupEventListeners() {
@@ -197,7 +205,7 @@ async function handleLogin(e) {
         const data = await response.json();
         
         if (response.ok) {
-            authToken = data.access_token;
+            authToken = sanitizeAuthToken(data.access_token);
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
             isFirstLogin = data.first_run || false;
@@ -277,6 +285,12 @@ function handleLogout() {
 
 async function verifyTokenAndShowApp() {
     try {
+        const token = getValidAuthToken();
+        if (!token) {
+            showLogin();
+            return;
+        }
+
         const response = await fetch(`${API_BASE}/auth/me`, {
             headers: getAuthHeaders()
         });
@@ -388,6 +402,10 @@ function switchTab(tabName) {
 
 // Dashboard functions
 async function loadDashboardData() {
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping dashboard load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/stats/dashboard`, {
             headers: getAuthHeaders()
@@ -673,7 +691,7 @@ async function handleIPGeneration(e) {
 
 // Lists management
 async function loadLists() {
-    if (!authToken) {
+    if (!getValidAuthToken()) {
         console.warn('No auth token available; skipping list load.');
         return;
     }
@@ -801,12 +819,17 @@ async function handleTestTelegram() {
 
 // WebSocket functions
 function connectDashboardWebSocket() {
+    const token = getValidAuthToken();
+    if (!token) {
+        console.warn('No auth token available; skipping dashboard websocket connection.');
+        return;
+    }
     if (dashboardWebSocket) {
         dashboardWebSocket.close();
     }
-    
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${authToken}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${token}`;
     dashboardWebSocket = new WebSocket(wsUrl);
     
     dashboardWebSocket.onopen = function() {
@@ -830,12 +853,17 @@ function connectDashboardWebSocket() {
 }
 
 function connectScanWebSocket(scanId) {
+    const token = getValidAuthToken();
+    if (!token) {
+        console.warn('No auth token available; skipping scan websocket connection.');
+        return;
+    }
     if (websocketConnection) {
         websocketConnection.close();
     }
-    
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}?token=${authToken}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}?token=${token}`;
     websocketConnection = new WebSocket(wsUrl);
     
     websocketConnection.onopen = function() {
@@ -1271,7 +1299,7 @@ function attachScanFormGating() {
 let cachedLists = [];
 
 async function loadLists() {
-    if (!authToken) {
+    if (!getValidAuthToken()) {
         console.warn('No auth token available; skipping list load.');
         return;
     }
@@ -1614,6 +1642,10 @@ async function handlePauseResume() {
 }
 async function loadScanConfig() {
     // Load available wordlists for dropdown
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping scan config load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/wordlists`, {
             headers: getAuthHeaders()
@@ -1642,6 +1674,10 @@ async function loadScanConfig() {
 
 async function loadGeneratedLists() {
     // Load generated IP lists for the IP Generator tab
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping generated lists load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/generator/lists`, {
             headers: getAuthHeaders()
@@ -1658,6 +1694,10 @@ async function loadGeneratedLists() {
 
 async function loadHits() {
     // Load scan results/hits for current user
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping hits load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/results`, {
             headers: getAuthHeaders()
@@ -1675,7 +1715,7 @@ async function loadHits() {
 
 async function loadSettings() {
     // Load current user settings and system configuration
-    if (!authToken) {
+    if (!getValidAuthToken()) {
         console.warn('No auth token available; skipping settings load.');
         return;
     }
@@ -1683,15 +1723,14 @@ async function loadSettings() {
         const response = await fetch(`${API_BASE}/settings`, {
             headers: getAuthHeaders()
         });
-        
+
         if (response.ok) {
             const settings = await response.json();
-            function displaySettings(settings) {
-    // Minimal safe renderer to avoid breaking the Settings tab
-    // We only stop the crash here; actual field mapping can be done next.
-        console.log('Settings loaded:', settings);
-}
-            displaySettings(settings);
+            if (typeof displaySettings === 'function') {
+                displaySettings(settings);
+            } else {
+                console.warn('displaySettings is not available; skipping render.');
+            }
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
