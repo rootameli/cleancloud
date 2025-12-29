@@ -200,7 +200,7 @@ async function handleLogin(e) {
             authToken = data.access_token;
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
-            isFirstLogin = data.first_login || false;
+            isFirstLogin = data.first_run || false;
             
             if (isFirstLogin) {
                 showPasswordChange();
@@ -1686,6 +1686,11 @@ async function loadSettings() {
         
         if (response.ok) {
             const settings = await response.json();
+            function displaySettings(settings) {
+    // Minimal safe renderer to avoid breaking the Settings tab
+    // We only stop the crash here; actual field mapping can be done next.
+        console.log('Settings loaded:', settings);
+}
             displaySettings(settings);
         }
     } catch (error) {
