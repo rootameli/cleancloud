@@ -1,7 +1,7 @@
 /* Futuristic HTTPx Cloud Scanner - JavaScript */
 
 // Global variables
-let authToken = localStorage.getItem('authToken');
+let authToken = sanitizeAuthToken(localStorage.getItem('authToken'));
 let currentUser = null;
 let currentScanId = null;
 let websocketConnection = null;
@@ -10,6 +10,36 @@ let isFirstLogin = false;
 
 // API Base URL
 const API_BASE = '/api/v1';
+
+function sanitizeAuthToken(token) {
+    if (!token || token === 'null' || token === 'undefined') {
+        return null;
+    }
+    return token;
+}
+
+function getValidAuthToken() {
+    const stored = sanitizeAuthToken(authToken ?? localStorage.getItem('authToken'));
+    if (!stored) {
+        authToken = null;
+        localStorage.removeItem('authToken');
+        return null;
+    }
+    authToken = stored;
+    return stored;
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+    const token = getValidAuthToken();
+    if (!token) {
+        return { ...extraHeaders };
+    }
+    return { ...extraHeaders, 'Authorization': `Bearer ${token}` };
+}
+
+if (!authToken) {
+    localStorage.removeItem('authToken');
+}
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -20,7 +50,7 @@ function initializeApp() {
     console.log('🚀 Initializing HTTPx Cloud Scanner...');
     
     // Check authentication status
-    if (authToken) {
+    if (getValidAuthToken()) {
         verifyTokenAndShowApp();
     } else {
         showLogin();
@@ -31,9 +61,8 @@ function initializeApp() {
     
     // Initialize UI components
     initializeUIComponents();
-    
-    // Initialize lists cache and populate selectors
-    loadLists();
+
+    // Do not load protected resources until authentication is confirmed
 }
 
 function setupEventListeners() {
@@ -176,7 +205,7 @@ async function handleLogin(e) {
         const data = await response.json();
         
         if (response.ok) {
-            authToken = data.access_token;
+            authToken = sanitizeAuthToken(data.access_token);
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
             isFirstLogin = data.first_login || false;
@@ -215,10 +244,9 @@ async function handlePasswordChange(e) {
         showLoading('passwordForm');
         const response = await fetch(`${API_BASE}/auth/change-password`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify(passwords)
         });
         
@@ -257,8 +285,14 @@ function handleLogout() {
 
 async function verifyTokenAndShowApp() {
     try {
+        const token = getValidAuthToken();
+        if (!token) {
+            showLogin();
+            return;
+        }
+
         const response = await fetch(`${API_BASE}/auth/me`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -368,9 +402,13 @@ function switchTab(tabName) {
 
 // Dashboard functions
 async function loadDashboardData() {
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping dashboard load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/stats/dashboard`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -543,7 +581,7 @@ async function handlePathsUpload(e) {
     try {
         const response = await fetch(`${API_BASE}/upload/wordlist`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` },
+            headers: getAuthHeaders(),
             body: formData
         });
         
@@ -628,10 +666,9 @@ async function handleIPGeneration(e) {
         showLoading('ipGenForm');
         const response = await fetch(`${API_BASE}/ip-generator/generate`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify(request)
         });
         
@@ -654,9 +691,13 @@ async function handleIPGeneration(e) {
 
 // Lists management
 async function loadLists() {
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping list load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/lists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -739,10 +780,9 @@ async function handleTelegramSettings(e) {
     try {
         const response = await fetch(`${API_BASE}/settings/telegram`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify(settings)
         });
         
@@ -762,7 +802,7 @@ async function handleTestTelegram() {
     try {
         const response = await fetch(`${API_BASE}/notifications/test/telegram`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -779,12 +819,17 @@ async function handleTestTelegram() {
 
 // WebSocket functions
 function connectDashboardWebSocket() {
+    const token = getValidAuthToken();
+    if (!token) {
+        console.warn('No auth token available; skipping dashboard websocket connection.');
+        return;
+    }
     if (dashboardWebSocket) {
         dashboardWebSocket.close();
     }
-    
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${authToken}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${token}`;
     dashboardWebSocket = new WebSocket(wsUrl);
     
     dashboardWebSocket.onopen = function() {
@@ -808,12 +853,17 @@ function connectDashboardWebSocket() {
 }
 
 function connectScanWebSocket(scanId) {
+    const token = getValidAuthToken();
+    if (!token) {
+        console.warn('No auth token available; skipping scan websocket connection.');
+        return;
+    }
     if (websocketConnection) {
         websocketConnection.close();
     }
-    
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}?token=${authToken}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}?token=${token}`;
     websocketConnection = new WebSocket(wsUrl);
     
     websocketConnection.onopen = function() {
@@ -856,7 +906,7 @@ function startScanPolling(scanId) {
         try {
             // Get scan progress
             const progressResponse = await fetch(`${API_BASE}/scans/${scanId}/progress`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
+                headers: getAuthHeaders()
             });
             
             if (progressResponse.ok) {
@@ -1249,9 +1299,13 @@ function attachScanFormGating() {
 let cachedLists = [];
 
 async function loadLists() {
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping list load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/lists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1394,7 +1448,7 @@ async function deleteList(listId) {
     try {
         const response = await fetch(`${API_BASE}/lists/${listId}`, {
             method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1463,10 +1517,9 @@ async function handleScanSubmit(e) {
         showLoading('scanForm');
         const response = await fetch(`${API_BASE}/scans`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify(scanRequest)
         });
         
@@ -1551,10 +1604,9 @@ async function handlePauseResume() {
     try {
         const response = await fetch(`${API_BASE}/scans/${currentScanId}/control`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify({ action })
         });
         
@@ -1590,9 +1642,13 @@ async function handlePauseResume() {
 }
 async function loadScanConfig() {
     // Load available wordlists for dropdown
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping scan config load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/wordlists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1618,9 +1674,13 @@ async function loadScanConfig() {
 
 async function loadGeneratedLists() {
     // Load generated IP lists for the IP Generator tab
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping generated lists load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/generator/lists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1634,9 +1694,13 @@ async function loadGeneratedLists() {
 
 async function loadHits() {
     // Load scan results/hits for current user
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping hits load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/results`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1651,18 +1715,40 @@ async function loadHits() {
 
 async function loadSettings() {
     // Load current user settings and system configuration
+    if (!getValidAuthToken()) {
+        console.warn('No auth token available; skipping settings load.');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE}/settings`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
-        
+
         if (response.ok) {
             const settings = await response.json();
-            displaySettings(settings);
+            if (typeof displaySettings === 'function') {
+                displaySettings(settings);
+            } else {
+                console.warn('displaySettings is not available; skipping render.');
+            }
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
         showUserMessage('Failed to load settings', 'error');
+    }
+}
+
+function displaySettings(settings = {}) {
+    const telegram = settings.telegram || {};
+
+    const botTokenInput = document.getElementById('telegramBotToken');
+    if (botTokenInput) {
+        botTokenInput.value = telegram.bot_token || '';
+    }
+
+    const chatIdInput = document.getElementById('telegramChatId');
+    if (chatIdInput) {
+        chatIdInput.value = telegram.chat_id || '';
     }
 }
 
@@ -1686,7 +1772,7 @@ async function uploadList(formData, fileName) {
         
         const response = await fetch(`${API_BASE}/lists`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` },
+            headers: getAuthHeaders(),
             body: formData
         });
         
@@ -1731,10 +1817,9 @@ async function pauseScan(scanId) {
     try {
         const response = await fetch(`${API_BASE}/scans/${scanId}/control`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify({action: 'pause'})
         });
         
@@ -1758,10 +1843,9 @@ async function stopScan(scanId) {
     try {
         const response = await fetch(`${API_BASE}/scans/${scanId}/control`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify({action: 'stop'})
         });
         
@@ -1792,7 +1876,7 @@ async function loadStatistiques() {
         
         // Get provider stats
         const response = await fetch(`${API_BASE}/results/providers`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1802,7 +1886,7 @@ async function loadStatistiques() {
         
         // Get result counters
         const countersResponse = await fetch(`${API_BASE}/results/counters`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (countersResponse.ok) {
@@ -1859,7 +1943,7 @@ async function loadResultats() {
         params.append('limit', '50');
         
         const response = await fetch(`${API_BASE}/results?${params}`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1911,7 +1995,7 @@ function updateResultCounters(counters) {
 async function showResultDetails(hitId) {
     try {
         const response = await fetch(`${API_BASE}/results/${hitId}`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -1984,7 +2068,7 @@ async function purgeAllResults() {
     try {
         const response = await fetch(`${API_BASE}/results/purge`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -2006,7 +2090,7 @@ async function loadDomaines() {
         console.log('Loading domaines...');
         
         const response = await fetch(`${API_BASE}/lists`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -2016,7 +2100,7 @@ async function loadDomaines() {
         
         // Load grabber status
         const grabberResponse = await fetch(`${API_BASE}/grabber/status`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (grabberResponse.ok) {
@@ -2074,7 +2158,7 @@ async function startGrabber() {
     try {
         const response = await fetch(`${API_BASE}/grabber/start`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -2096,7 +2180,7 @@ async function stopGrabber() {
     try {
         const response = await fetch(`${API_BASE}/grabber/stop`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
@@ -2122,7 +2206,7 @@ async function deleteDomainList(listId) {
     try {
         const response = await fetch(`${API_BASE}/lists/${listId}`, {
             method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: getAuthHeaders()
         });
         
         if (response.ok) {
