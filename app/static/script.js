@@ -208,7 +208,7 @@ async function handleLogin(e) {
             authToken = sanitizeAuthToken(data.access_token);
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
-            isFirstLogin = data.first_login || false;
+            isFirstLogin = data.first_run || false;
             
             if (isFirstLogin) {
                 showPasswordChange();
