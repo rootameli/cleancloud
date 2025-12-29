@@ -1,5 +1,6 @@
 import bcrypt
-import jwt
+from jose import jwt
+from jose.exceptions import JWTError, ExpiredSignatureError
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict
@@ -94,13 +95,13 @@ class AuthManager:
             config = config_manager.get_config()
             payload = jwt.decode(token, config.secret_key, algorithms=["HS256"])
             return payload
-        except jwt.ExpiredSignatureError:
+        except ExpiredSignatureError:
             logger.warning("Token expired", token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired"
             )
-        except jwt.JWTError:
+        except JWTError:
             logger.warning("Invalid token", token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
