@@ -1,3 +1,4 @@
+import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -33,7 +34,7 @@ class ConfigManager:
                                 patterns.append(pattern_data)
                         data['default_patterns'] = patterns
                     
-                    self.config = ConfigModel(**data)
+                    self.config = ConfigModel(**self._apply_env_overrides(data))
                     logger.info("Configuration loaded", path=str(self.config_path))
             else:
                 self.config = self._create_default_config()
@@ -161,7 +162,7 @@ class ConfigManager:
             first_run=True,
             rate_limit_per_minute=60,
             max_scan_retention_days=30,
-            httpx_path="httpx",
+            httpx_path=self._get_env_httpx_path(),
             default_patterns=default_patterns,
             
             # v1 enhanced options
@@ -200,6 +201,22 @@ class ConfigManager:
             logger.info("Configuration saved", path=str(self.config_path))
         except Exception as e:
             logger.error("Failed to save configuration", error=str(e))
+
+    def _get_env_httpx_path(self) -> str:
+        """Return HTTPX path override from environment if provided"""
+        env_path = os.getenv("HTTPX_PATH")
+        if env_path:
+            return env_path
+        return "httpx"
+
+    def _apply_env_overrides(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply environment overrides (currently HTTPX_PATH)"""
+        merged = dict(data or {})
+        env_path = os.getenv("HTTPX_PATH")
+        if env_path:
+            merged["httpx_path"] = env_path
+            logger.info("HTTPX_PATH override applied", path=env_path)
+        return merged
     
     def get_config(self) -> ConfigModel:
         """Get current configuration"""

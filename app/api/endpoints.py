@@ -89,11 +89,12 @@ async def update_config(updates: Dict[str, Any]):
 
 
 # Scan lifecycle endpoints
-@router.post("/scans", dependencies=[Depends(get_current_user)])
+@router.post("/scans", dependencies=[Depends(get_current_user)], include_in_schema=False)
 async def create_scan(scan_request: ScanRequest) -> Dict[str, str]:
-    """Create and start a new scan"""
-    scan_id = await scanner.start_scan(scan_request)
-    return {"scan_id": scan_id, "status": "queued"}
+    """Delegate to enhanced scan creation to keep a single implementation."""
+    from .endpoints_enhanced import handle_create_scan
+
+    return await handle_create_scan(scan_request)
 
 
 @router.get("/scans", dependencies=[Depends(get_current_user)])

@@ -20,12 +20,23 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 # Settings file path
-SETTINGS_FILE = Path("data/settings.json")
-SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+SETTINGS_FILE = BASE_DIR / "data" / "settings.json"
+
+
+def ensure_settings_file():
+    """Ensure settings file and parent directory exist"""
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not SETTINGS_FILE.exists():
+        SETTINGS_FILE.write_text(json.dumps({}, indent=2))
+
+
+ensure_settings_file()
 
 
 def _load_settings() -> Dict[str, Any]:
     """Load settings from file"""
+    ensure_settings_file()
     if SETTINGS_FILE.exists():
         try:
             with open(SETTINGS_FILE, 'r') as f:
@@ -37,6 +48,7 @@ def _load_settings() -> Dict[str, Any]:
 
 def _save_settings(settings: Dict[str, Any]) -> None:
     """Save settings to file"""
+    ensure_settings_file()
     try:
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(settings, f, indent=2)
