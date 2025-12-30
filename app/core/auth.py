@@ -95,13 +95,13 @@ class AuthManager:
             config = config_manager.get_config()
             payload = jwt.decode(token, config.secret_key, algorithms=["HS256"])
             return payload
-        except ExpiredSignatureError:
+        except jwt.ExpiredSignatureError:
             logger.warning("Token expired", token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired"
             )
-        except JWTError:
+        except jwt.JWTError:
             logger.warning("Invalid token", token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
