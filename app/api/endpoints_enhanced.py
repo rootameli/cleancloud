@@ -161,6 +161,8 @@ def _load_targets_from_list(list_id: str) -> List[str]:
 async def handle_create_scan(scan_request: ScanRequest) -> Dict[str, str]:
     """Shared scan creation logic for both enhanced and legacy routers."""
     try:
+        from app.core.path_utils import resolve_wordlist_path
+
         # Normalize targets from explicit list or uploaded list file
         targets: List[str] = []
         if scan_request.list_id:
@@ -179,6 +181,10 @@ async def handle_create_scan(scan_request: ScanRequest) -> Dict[str, str]:
                 status_code=400,
                 detail="Concurrency exceeds maximum limit of 50,000",
             )
+
+        # Resolve wordlist path early to surface clear errors
+        resolved_wordlist = resolve_wordlist_path(scan_request.wordlist)
+        scan_request.__dict__["resolved_wordlist_path"] = str(resolved_wordlist)
 
         # Inject resolved targets back into the request
         scan_request.targets = targets

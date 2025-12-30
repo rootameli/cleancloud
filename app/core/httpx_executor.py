@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
 from datetime import datetime, timezone
 import structlog
+from fastapi import HTTPException
 
 from .models import ScanRequest, ScanResult, ScanStatus, Finding
 from .config import config_manager
+from .path_utils import resolve_wordlist_path
 
 logger = structlog.get_logger()
 
@@ -157,15 +159,29 @@ class HTTPxExecutor:
         # Load wordlist paths
         wordlist_paths = []
         if scan_request.wordlist:
-            wordlist_file = Path("data") / "lists" / scan_request.wordlist
-            if wordlist_file.exists():
-                try:
-                    with open(wordlist_file, 'r') as f:
-                        wordlist_paths = [line.strip() for line in f if line.strip()]
-                except Exception as e:
-                    logger.warning("Failed to load wordlist", 
-                                 wordlist=scan_request.wordlist, error=str(e))
-        
+            wordlist_file = getattr(scan_request, "resolved_wordlist_path", None)
+            if not wordlist_file:
+                wordlist_file = resolve_wordlist_path(scan_request.wordlist)
+
+            try:
+                with open(wordlist_file, 'r', encoding='utf-8') as f:
+                    wordlist_paths = [line.strip() for line in f if line.strip()]
+                logger.info(
+                    "Loaded wordlist",
+                    wordlist=scan_request.wordlist,
+                    resolved_path=str(wordlist_file),
+                    entries=len(wordlist_paths),
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(
+                    "Failed to load wordlist",
+                    wordlist=scan_request.wordlist,
+                    resolved_path=str(wordlist_file),
+                    error=str(e),
+                )
+
         # Default paths if no wordlist
         if not wordlist_paths:
             wordlist_paths = ['.well-known/security.txt', 'robots.txt', '.env', 'config.json']
