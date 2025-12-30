@@ -5,11 +5,13 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict
 from fastapi import HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import structlog
 from .models import User
 from .config import config_manager
 
 
 security = HTTPBearer()
+logger = structlog.get_logger()
 
 
 class AuthManager:
@@ -93,11 +95,19 @@ class AuthManager:
             payload = jwt.decode(token, config.secret_key, algorithms=["HS256"])
             return payload
         except jwt.ExpiredSignatureError:
+            logger.warning("Token expired", token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired"
             )
         except jwt.JWTError:
+            logger.warning("Invalid token", token_present=bool(token))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        except Exception as exc:
+            logger.error("Token verification failed", error=str(exc), token_present=bool(token))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token"

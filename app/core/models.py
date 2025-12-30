@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from datetime import datetime
 from enum import Enum
 import uuid
@@ -44,7 +44,14 @@ class ModuleType(str, Enum):
 
 
 class ScanRequest(BaseModel):
-    targets: List[str] = Field(..., description="List of target URLs/domains")
+    targets: Optional[List[str]] = Field(
+        default=None, description="List of target URLs/domains"
+    )
+    list_id: Optional[str] = Field(
+        default=None,
+        alias="target_list_id",
+        description="Identifier of an uploaded targets list",
+    )
     wordlist: str = Field(default="paths.txt", description="Wordlist filename")
     modules: List[ModuleType] = Field(default=[], description="Modules to scan with")
     concurrency: int = Field(default=50, ge=1, le=50000, description="Number of concurrent threads")
@@ -55,9 +62,7 @@ class ScanRequest(BaseModel):
     path_rules: List[str] = Field(default=[], description="Custom path patterns")
     notes: Optional[str] = Field(default=None, description="Scan notes")
 
-    class Config:
-        # Allow extra keys from UI (e.g., crack_name, services) without validation errors
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     @validator('modules', pre=True)
     def coerce_modules(cls, v):
