@@ -4,6 +4,7 @@ FROM python:3.12-slim as builder
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    unzip \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
