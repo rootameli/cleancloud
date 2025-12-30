@@ -139,41 +139,85 @@ async def get_metrics():
         media_type=metrics.get_content_type()
     )
 
+def _load_targets_from_list(list_id: str) -> List[str]:
+    """Resolve targets from an uploaded list by its hashed ID."""
+    if not list_id:
+        return []
+
+    # Use the grabber's configured directory for lists
+    from .grabber import grabber
+
+    if not grabber.data_dir.exists():
+        grabber.data_dir.mkdir(parents=True, exist_ok=True)
+
+    for file_path in grabber.data_dir.iterdir():
+        if file_path.is_file() and str(hash(file_path.name)) == list_id:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return [line.strip() for line in f if line.strip()]
+
+    raise HTTPException(status_code=404, detail="List not found")
+
+
+async def handle_create_scan(scan_request: ScanRequest) -> Dict[str, str]:
+    """Shared scan creation logic for both enhanced and legacy routers."""
+    try:
+        # Normalize targets from explicit list or uploaded list file
+        targets: List[str] = []
+        if scan_request.list_id:
+            targets = _load_targets_from_list(scan_request.list_id)
+        elif scan_request.targets:
+            targets = [t for t in scan_request.targets if t]
+
+        if not targets:
+            raise HTTPException(
+                status_code=422,
+                detail="No targets provided; supply 'targets' or 'list_id'",
+            )
+
+        if scan_request.concurrency > 50000:
+            raise HTTPException(
+                status_code=400,
+                detail="Concurrency exceeds maximum limit of 50,000",
+            )
+
+        # Inject resolved targets back into the request
+        scan_request.targets = targets
+
+        # Start scan
+        scan_id = await enhanced_scanner.start_scan(scan_request)
+
+        # Update metrics
+        metrics.scan_started(
+            scan_id,
+            len(scan_request.targets),
+            0,  # URLs will be counted later
+            scan_request.concurrency,
+        )
+
+        logger.info(
+            "Scan created via API",
+            scan_id=scan_id,
+            targets=len(scan_request.targets),
+        )
+
+        return {
+            "scan_id": scan_id,
+            "crack_id": enhanced_scanner.get_scan_result(scan_id).crack_id,
+            "status": "queued",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to create scan", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Enhanced scan endpoints
 @router.post("/scans", dependencies=[Depends(get_current_user)])
 async def create_scan(scan_request: ScanRequest) -> Dict[str, str]:
     """Create and start a new scan with enhanced features"""
-    try:
-        # Validate request
-        if not scan_request.targets:
-            raise HTTPException(status_code=400, detail="No targets provided")
-        
-        if scan_request.concurrency > 50000:
-            raise HTTPException(status_code=400, detail="Concurrency exceeds maximum limit of 50,000")
-        
-        # Start scan
-        scan_id = await enhanced_scanner.start_scan(scan_request)
-        
-        # Update metrics
-        metrics.scan_started(
-            scan_id, 
-            len(scan_request.targets), 
-            0,  # URLs will be counted later
-            scan_request.concurrency
-        )
-        
-        logger.info("Scan created via API", scan_id=scan_id, 
-                   targets=len(scan_request.targets))
-        
-        return {
-            "scan_id": scan_id,
-            "crack_id": enhanced_scanner.get_scan_result(scan_id).crack_id,
-            "status": "queued"
-        }
-        
-    except Exception as e:
-        logger.error("Failed to create scan", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+    return await handle_create_scan(scan_request)
 
 @router.get("/scans", dependencies=[Depends(get_current_user)])
 async def list_scans(

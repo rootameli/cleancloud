@@ -1546,7 +1546,7 @@ async function handleScanSubmit(e) {
     const scanRequest = {
         name: formData.get('crackName'),
         targets: targets,
-        target_list_id: selectedListId || null,
+        list_id: selectedListId || null,
         wordlist: formData.get('wordlist'),
         concurrency: parseInt(formData.get('concurrency')),
         timeout: parseInt(formData.get('timeout')),
