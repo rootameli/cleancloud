@@ -7,6 +7,7 @@ let currentScanId = null;
 let websocketConnection = null;
 let dashboardWebSocket = null;
 let isFirstLogin = false;
+let isAuthenticated = false;
 
 // API Base URL
 const API_BASE = '/api/v1';
@@ -208,7 +209,8 @@ async function handleLogin(e) {
             authToken = sanitizeAuthToken(data.access_token);
             localStorage.setItem('authToken', authToken);
             currentUser = data.user;
-            isFirstLogin = data.first_run || false;
+            isFirstLogin = data.first_login || false;
+            isAuthenticated = true;
             
             if (isFirstLogin) {
                 showPasswordChange();
@@ -268,6 +270,7 @@ async function handlePasswordChange(e) {
 function handleLogout() {
     authToken = null;
     currentUser = null;
+    isAuthenticated = false;
     localStorage.removeItem('authToken');
     
     // Close WebSocket connections
@@ -279,6 +282,7 @@ function handleLogout() {
         dashboardWebSocket.close();
         dashboardWebSocket = null;
     }
+    stopDashboardPolling();
     
     showLogin();
 }
@@ -298,14 +302,17 @@ async function verifyTokenAndShowApp() {
         if (response.ok) {
             const userData = await response.json();
             currentUser = userData;
+            isAuthenticated = true;
             showMainApp();
         } else {
             authToken = null;
             localStorage.removeItem('authToken');
+            isAuthenticated = false;
             showLogin();
         }
     } catch (error) {
         console.error('Token verification error:', error);
+        isAuthenticated = false;
         showLogin();
     }
 }
@@ -421,6 +428,9 @@ async function loadDashboardData() {
 }
 
 function updateDashboardStats(stats) {
+    if (!stats || typeof stats !== 'object') {
+        return;
+    }
     // Update stat cards
     updateElement('totalActiveScans', stats.active_scans || 0);
     updateElement('totalHits', stats.total_hits || 0);
@@ -819,6 +829,10 @@ async function handleTestTelegram() {
 
 // WebSocket functions
 function connectDashboardWebSocket() {
+    if (!isAuthenticated) {
+        console.warn('User not authenticated; skipping dashboard websocket connection.');
+        return;
+    }
     const token = getValidAuthToken();
     if (!token) {
         console.warn('No auth token available; skipping dashboard websocket connection.');
@@ -831,24 +845,34 @@ function connectDashboardWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?token=${token}`;
     dashboardWebSocket = new WebSocket(wsUrl);
-    
+
     dashboardWebSocket.onopen = function() {
         console.log('Dashboard WebSocket connected');
+        stopDashboardPolling();
     };
-    
+
     dashboardWebSocket.onmessage = function(event) {
         const data = JSON.parse(event.data);
         handleDashboardWebSocketMessage(data);
     };
-    
-    dashboardWebSocket.onclose = function() {
+
+    dashboardWebSocket.onclose = function(event) {
         console.log('Dashboard WebSocket disconnected');
-        // Attempt to reconnect after 5 seconds
+        const shouldRetry = isAuthenticated && token && event.code !== 4401 && event.code !== 1008;
+        if (!shouldRetry) {
+            if (isAuthenticated) {
+                startDashboardPolling();
+            }
+            return;
+        }
         setTimeout(connectDashboardWebSocket, 5000);
     };
-    
+
     dashboardWebSocket.onerror = function(error) {
         console.error('Dashboard WebSocket error:', error);
+        if (isAuthenticated) {
+            startDashboardPolling();
+        }
     };
 }
 
@@ -894,6 +918,7 @@ function connectScanWebSocket(scanId) {
 
 // Polling fallback for when WebSocket fails
 let scanPollingInterval = null;
+let dashboardPollingInterval = null;
 
 function startScanPolling(scanId) {
     if (scanPollingInterval) {
@@ -938,6 +963,22 @@ function startScanPolling(scanId) {
             console.error('Polling error:', error);
         }
     }, 2000); // Poll every 2 seconds
+}
+
+function startDashboardPolling() {
+    if (dashboardPollingInterval) {
+        return;
+    }
+    dashboardPollingInterval = setInterval(() => {
+        loadDashboardData();
+    }, 5000);
+}
+
+function stopDashboardPolling() {
+    if (dashboardPollingInterval) {
+        clearInterval(dashboardPollingInterval);
+        dashboardPollingInterval = null;
+    }
 }
 
 function stopScanPolling() {
@@ -1878,20 +1919,24 @@ async function loadStatistiques() {
         const response = await fetch(`${API_BASE}/results/providers`, {
             headers: getAuthHeaders()
         });
-        
+
         if (response.ok) {
             const providerStats = await response.json();
             updateProviderTiles(providerStats);
+        } else {
+            updateProviderTiles({});
         }
         
         // Get result counters
         const countersResponse = await fetch(`${API_BASE}/results/counters`, {
             headers: getAuthHeaders()
         });
-        
+
         if (countersResponse.ok) {
             const counters = await countersResponse.json();
             updateResultCounters(counters);
+        } else {
+            updateResultCounters({});
         }
         
     } catch (error) {

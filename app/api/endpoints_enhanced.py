@@ -836,20 +836,20 @@ async def get_dashboard_stats(session: AsyncSession = Depends(get_db_session)) -
         
         # Database stats
         total_scans_result = await session.execute(select(func.count(ScanDB.id)))
-        total_scans = total_scans_result.scalar()
+        total_scans = total_scans_result.scalar() or 0
         
         completed_scans_result = await session.execute(
             select(func.count(ScanDB.id)).where(ScanDB.status == "completed")
         )
-        completed_scans = completed_scans_result.scalar()
+        completed_scans = completed_scans_result.scalar() or 0
         
         total_hits_result = await session.execute(select(func.count(FindingDB.id)))
-        total_hits = total_hits_result.scalar()
+        total_hits = total_hits_result.scalar() or 0
         
         verified_hits_result = await session.execute(
             select(func.count(FindingDB.id)).where(FindingDB.works == True)
         )
-        verified_hits = verified_hits_result.scalar()
+        verified_hits = verified_hits_result.scalar() or 0
         
         # Service breakdown
         service_stats_result = await session.execute(
@@ -857,7 +857,7 @@ async def get_dashboard_stats(session: AsyncSession = Depends(get_db_session)) -
             .group_by(FindingDB.service)
             .order_by(func.count(FindingDB.id).desc())
         )
-        service_stats = {service: count for service, count in service_stats_result.fetchall()}
+        service_stats = {service: count for service, count in service_stats_result.fetchall()} or {}
         
         return {
             "active_scans": active_scans_count,
