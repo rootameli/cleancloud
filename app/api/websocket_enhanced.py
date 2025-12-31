@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, List, Set, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import HTTPException
 import structlog
 
 from ..core.auth import auth_manager
@@ -303,19 +304,38 @@ class EnhancedConnectionManager:
 manager = EnhancedConnectionManager()
 
 
+async def _authenticate_websocket(websocket: WebSocket, token: Optional[str]) -> Optional[str]:
+    """Validate a JWT token for WebSocket connections using the same logic as REST auth."""
+    token_value = token or websocket.query_params.get("token")
+
+    if not token_value:
+        logger.warning("WebSocket authentication failed: missing token")
+        await websocket.close(code=4401, reason="Token required")
+        return None
+
+    try:
+        payload = auth_manager.verify_token(token_value)
+        return payload.get("sub")
+    except HTTPException as exc:
+        logger.warning(
+            "WebSocket authentication failed",
+            code=exc.status_code,
+            reason=exc.detail,
+        )
+        await websocket.close(code=4401, reason=exc.detail)
+    except Exception as exc:
+        logger.error("WebSocket authentication error", error=str(exc))
+        await websocket.close(code=4401, reason="Invalid token")
+
+    return None
+
+
 async def websocket_scan_endpoint(websocket: WebSocket, scan_id: str, token: str = None):
     """WebSocket endpoint for scan-specific events"""
-    user_id = None
-    
-    # Verify authentication if token provided
-    if token:
-        try:
-            payload = auth_manager.verify_token(token)
-            user_id = payload.get("sub")
-        except Exception:
-            await websocket.close(code=1008, reason="Invalid token")
-            return
-    
+    user_id = await _authenticate_websocket(websocket, token)
+    if user_id is None:
+        return
+
     await manager.connect(websocket, user_id)
     await manager.subscribe_to_scan(websocket, scan_id)
     
@@ -378,8 +398,8 @@ async def websocket_scan_endpoint(websocket: WebSocket, scan_id: str, token: str
                     }
                     await manager.send_to_connection(websocket, status_message)
     
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as exc:
+        logger.info("Scan WebSocket disconnected", scan_id=scan_id, code=exc.code)
     except Exception as e:
         logger.error("WebSocket scan endpoint error", scan_id=scan_id, error=str(e))
     finally:
@@ -388,17 +408,10 @@ async def websocket_scan_endpoint(websocket: WebSocket, scan_id: str, token: str
 
 async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
     """WebSocket endpoint for dashboard events"""
-    user_id = None
-    
-    # Verify authentication if token provided
-    if token:
-        try:
-            payload = auth_manager.verify_token(token)
-            user_id = payload.get("sub")
-        except Exception:
-            await websocket.close(code=1008, reason="Invalid token")
-            return
-    
+    user_id = await _authenticate_websocket(websocket, token)
+    if user_id is None:
+        return
+
     await manager.connect(websocket, user_id)
     await manager.subscribe_to_dashboard(websocket)
     
@@ -462,8 +475,8 @@ async def websocket_dashboard_endpoint(websocket: WebSocket, token: str = None):
                 }
                 await manager.send_to_connection(websocket, pong_message)
     
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as exc:
+        logger.info("Dashboard WebSocket disconnected", code=exc.code)
     except Exception as e:
         logger.error("WebSocket dashboard endpoint error", error=str(e))
     finally:

@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
 from datetime import datetime, timezone
 import structlog
+from fastapi import HTTPException
 
 from .models import ScanRequest, ScanResult, ScanStatus, Finding
 from .config import config_manager
+from .path_utils import resolve_wordlist_path
 
 logger = structlog.get_logger()
 
@@ -29,12 +31,13 @@ class HTTPxExecutor:
     def _find_httpx_binary(self) -> Optional[str]:
         """Find httpx binary in PATH or config"""
         import shutil
-        
+
         # Check config first
         if hasattr(self.config, 'httpx_path') and self.config.httpx_path:
             if Path(self.config.httpx_path).exists():
                 return self.config.httpx_path
-        
+            logger.warning("Configured httpx path does not exist", path=self.config.httpx_path)
+
         # Check PATH
         httpx_path = shutil.which('httpx')
         if httpx_path:
@@ -46,6 +49,49 @@ class HTTPxExecutor:
     def is_httpx_available(self) -> bool:
         """Check if httpx binary is available"""
         return self.httpx_path is not None
+
+    async def verify_httpx_binary(self) -> bool:
+        """Verify that the httpx binary is the ProjectDiscovery build"""
+        if not self.httpx_path:
+            logger.warning("httpx binary not available for verification")
+            return False
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                self.httpx_path,
+                "-h",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            combined = (stdout + stderr).decode("utf-8", errors="ignore")
+
+            if process.returncode != 0:
+                preview = combined.splitlines()[:3]
+                logger.warning(
+                    "httpx help command failed",
+                    path=self.httpx_path,
+                    return_code=process.returncode,
+                    stderr_preview=preview,
+                )
+                return False
+
+            if "ProjectDiscovery" not in combined:
+                logger.warning(
+                    "httpx binary does not appear to be ProjectDiscovery build",
+                    path=self.httpx_path,
+                )
+                return False
+
+            logger.info("httpx binary verified", path=self.httpx_path)
+            return True
+
+        except FileNotFoundError:
+            logger.warning("httpx binary missing", path=self.httpx_path)
+            return False
+        except Exception as e:
+            logger.warning("httpx verification failed", path=self.httpx_path, error=str(e))
+            return False
     
     async def build_httpx_command(self, scan_request: ScanRequest, targets_file: str) -> List[str]:
         """Build httpx command from scan request"""
@@ -113,15 +159,29 @@ class HTTPxExecutor:
         # Load wordlist paths
         wordlist_paths = []
         if scan_request.wordlist:
-            wordlist_file = Path("data") / "lists" / scan_request.wordlist
-            if wordlist_file.exists():
-                try:
-                    with open(wordlist_file, 'r') as f:
-                        wordlist_paths = [line.strip() for line in f if line.strip()]
-                except Exception as e:
-                    logger.warning("Failed to load wordlist", 
-                                 wordlist=scan_request.wordlist, error=str(e))
-        
+            wordlist_file = getattr(scan_request, "resolved_wordlist_path", None)
+            if not wordlist_file:
+                wordlist_file = resolve_wordlist_path(scan_request.wordlist)
+
+            try:
+                with open(wordlist_file, 'r', encoding='utf-8') as f:
+                    wordlist_paths = [line.strip() for line in f if line.strip()]
+                logger.info(
+                    "Loaded wordlist",
+                    wordlist=scan_request.wordlist,
+                    resolved_path=str(wordlist_file),
+                    entries=len(wordlist_paths),
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(
+                    "Failed to load wordlist",
+                    wordlist=scan_request.wordlist,
+                    resolved_path=str(wordlist_file),
+                    error=str(e),
+                )
+
         # Default paths if no wordlist
         if not wordlist_paths:
             wordlist_paths = ['.well-known/security.txt', 'robots.txt', '.env', 'config.json']
@@ -211,9 +271,10 @@ class HTTPxExecutor:
     async def _monitor_process(self, scan_id: str, process: asyncio.subprocess.Process,
                               progress_callback=None, log_callback=None, hit_callback=None) -> bool:
         """Monitor process output and emit telemetry"""
-        
+
         stats = self.scan_stats[scan_id]
-        
+        stderr_lines: List[str] = []
+
         async def read_stdout():
             """Read and parse stdout"""
             while True:
@@ -247,12 +308,15 @@ class HTTPxExecutor:
                     line = await process.stderr.readline()
                     if not line:
                         break
-                        
+
                     line = line.decode('utf-8', errors='ignore').strip()
-                    if line and log_callback:
-                        await log_callback(scan_id, line, "error")
-                        stats['errors'] += 1
-                        
+                    if line:
+                        if len(stderr_lines) < 3:
+                            stderr_lines.append(line)
+                        if log_callback:
+                            await log_callback(scan_id, line, "error")
+                            stats['errors'] += 1
+
                 except Exception as e:
                     logger.error("Error reading stderr", scan_id=scan_id, error=str(e))
                     break
@@ -267,14 +331,22 @@ class HTTPxExecutor:
             
             # Wait for output tasks to complete
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
-            
+
             success = return_code == 0
             if log_callback:
                 if success:
                     await log_callback(scan_id, f"httpx completed successfully", "info")
                 else:
                     await log_callback(scan_id, f"httpx exited with code {return_code}", "error")
-            
+
+            if not success and stderr_lines:
+                logger.error(
+                    "httpx exited with non-zero code",
+                    scan_id=scan_id,
+                    return_code=return_code,
+                    stderr_preview=stderr_lines,
+                )
+
             return success
             
         except asyncio.CancelledError:
