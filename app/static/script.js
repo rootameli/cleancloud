@@ -470,21 +470,6 @@ function restoreLastScanSession() {
     return true;
 }
 
-function restoreLastScanSession() {
-    const hashScanId = getScanIdFromHash();
-    const storedScanId = localStorage.getItem('lastScanId');
-    const scanId = hashScanId || storedScanId;
-
-    if (!scanId) {
-        return false;
-    }
-
-    switchTab('scan');
-    showLiveScanMonitor(scanId);
-    startScanTracking(scanId);
-    return true;
-}
-
 function switchTab(tabName) {
     if (!isAuthenticated && tabName !== 'login') {
         console.warn('Cannot switch tab while unauthenticated');
@@ -1980,6 +1965,12 @@ function showLiveScanMonitor(scanDataOrId, scanName) {
     const derivedId = typeof scanDataOrId === 'object' && scanDataOrId
         ? (scanDataOrId.id || scanDataOrId.scan_id || scanDataOrId.crack_id || '')
         : scanDataOrId;
+    if (!derivedId) {
+        console.warn('No scan id available for live monitor; showing setup');
+        switchTab('scan');
+        updateScanStartGating();
+        return;
+    }
     const titleValue = scanName || derivedId || 'Active scan';
 
     // Show live monitor
@@ -2008,6 +1999,7 @@ function requireCurrentScanId(actionName = 'action') {
         console.warn(`Missing scan id for ${actionName}`);
         return null;
     }
+    setCurrentScanId(id, `require-${actionName}`);
     return id;
 }
 
@@ -2260,12 +2252,15 @@ async function pauseScan(scanId) {
             }),
             body: JSON.stringify({action: 'pause'})
         });
-        
+
         if (response.ok) {
             showSuccess('Scan paused successfully');
         } else {
             const error = await response.json();
             showError('scanError', error.detail || 'Failed to pause scan');
+            if (response.status === 404) {
+                clearCurrentScanState('pause-404');
+            }
         }
     } catch (error) {
         console.error('Pause scan error:', error);
@@ -2762,7 +2757,7 @@ document.addEventListener('DOMContentLoaded', function() {
 const originalSwitchTab = window.switchTab;
 window.switchTab = function(tabName) {
     originalSwitchTab(tabName);
-    
+
     // Load data for specific tabs
     switch(tabName) {
         case 'statistiques':
@@ -2773,6 +2768,12 @@ window.switchTab = function(tabName) {
             break;
         case 'domaines':
             loadDomaines();
+            break;
+        case 'dashboard':
+            // Ensure dashboard refresh does not depend on scan state
+            startDashboardPolling();
+            loadDashboardData();
+            loadStatistiques();
             break;
     }
 };
