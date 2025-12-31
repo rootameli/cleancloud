@@ -1738,6 +1738,11 @@ async function handleScanSubmit(e) {
         showUserMessage('Please provide valid targets or select a list before starting a scan', 'error', 'Scan Validation Failed');
         return;
     }
+
+    if (!selectedListId && targets.length === 0) {
+        showUserMessage('Please provide targets or select a list before starting a scan', 'error', 'Scan Validation Failed');
+        return;
+    }
     
     // Get selected modules and services
     const modules = Array.from(document.querySelectorAll('input[name="modules"]:checked')).map(cb => cb.value);
