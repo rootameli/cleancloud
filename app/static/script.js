@@ -4,12 +4,12 @@
 let authToken = sanitizeAuthToken(localStorage.getItem('authToken'));
 let currentUser = null;
 let currentScanId = null;
+let selectedListId = sanitizeStoredId(localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
 function sanitizeStoredId(value) {
     if (!value || value === 'null' || value === 'undefined') return null;
     return value;
 }
 
-let selectedListId = sanitizeStoredId(localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
 console.log('targetsListId exists on load:', !!document.getElementById('targetsListId'));
 let websocketConnection = null;
 let dashboardWebSocket = null;
@@ -124,6 +124,21 @@ function setupEventListeners() {
     if (scanForm) {
         scanForm.addEventListener('submit', handleScanSubmit);
     }
+
+    const startScanBtn = document.getElementById('startScanBtn');
+    if (startScanBtn && scanForm) {
+        startScanBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Start button bound - submitting form');
+            if (typeof scanForm.requestSubmit === 'function') {
+                scanForm.requestSubmit();
+            } else {
+                handleScanSubmit(new Event('submit'));
+            }
+        });
+    } else {
+        console.warn('Start scan button not found for binding');
+    }
     
     // File upload buttons
     const uploadTargetsBtn = document.getElementById('uploadTargetsBtn');
@@ -194,10 +209,20 @@ function setupEventListeners() {
     });
     
     // Scan controls
-    const pauseResumeBtn = document.getElementById('pauseResumeBtn');
+    const pauseScanBtn = document.getElementById('pauseScanBtn');
     const stopScanBtn = document.getElementById('stopScanBtn');
-    if (pauseResumeBtn) pauseResumeBtn.addEventListener('click', handlePauseResume);
-    if (stopScanBtn) stopScanBtn.addEventListener('click', handleStopScan);
+    if (pauseScanBtn) {
+        pauseScanBtn.addEventListener('click', handlePauseScan);
+        console.log('Pause button bound');
+    } else {
+        console.warn('Pause button missing');
+    }
+    if (stopScanBtn) {
+        stopScanBtn.addEventListener('click', handleStopScan);
+        console.log('Stop button bound');
+    } else {
+        console.warn('Stop button missing');
+    }
 }
 
 function initializeUIComponents() {
@@ -1286,25 +1311,6 @@ function formatETA(seconds) {
     }
 }
 
-// Export functions
-async function handleExportHits() {
-    // Implementation for hit export
-    console.log('Export hits functionality to be implemented');
-}
-
-// Scan control functions
-async function handlePauseResume() {
-    // Implementation for pause/resume
-    console.log('Pause/Resume functionality to be implemented');
-}
-
-async function handleStopScan() {
-    // Implementation for stop scan
-    console.log('Stop scan functionality to be implemented');
-}
-
-// Placeholder functions for missing implementations
-
 // ===== GLOBAL MESSAGING SYSTEM =====
 function showUserMessage(message, type = 'info', title = null, dismissible = true, duration = null) {
     const container = document.getElementById('globalMessages');
@@ -1769,7 +1775,13 @@ async function handleScanSubmit(e) {
     const services = Array.from(document.querySelectorAll('input[name="services"]:checked')).map(cb => cb.value);
     
     const payloadListId = resolvedListId ? `${resolvedListId}` : null;
-    console.log('Submitting scan payload', { list_id: payloadListId, listSource, targetsCount: targets.length });
+    console.log('Submitting scan payload', {
+        list_id: payloadListId,
+        listSource,
+        targetsCount: targets.length,
+        wordlist: scanRequest.wordlist,
+        concurrency: scanRequest.concurrency
+    });
 
     const scanRequest = {
         name: formData.get('crackName'),
@@ -1865,21 +1877,27 @@ function showLiveScanMonitor(scanId, scanName) {
     }
 }
 
+function getActiveScanId() {
+    if (currentScanId) return currentScanId;
+    const hashId = getScanIdFromHash();
+    if (hashId) return hashId;
+    return localStorage.getItem('lastScanId');
+}
+
 // ===== PAUSE/RESUME FUNCTIONALITY =====
-async function handlePauseResume() {
-    if (!currentScanId) {
+async function handlePauseScan() {
+    const scanId = getActiveScanId();
+    if (!scanId) {
         showUserMessage('No active scan to control', 'warning');
         return;
     }
-    
-    const button = document.getElementById('pauseResumeBtn');
-    if (!button) return;
-    
-    const isPaused = button.textContent.includes('Resume');
+
+    const button = document.getElementById('pauseScanBtn');
+    const isPaused = button?.textContent?.includes('Resume');
     const action = isPaused ? 'resume' : 'pause';
     
     try {
-        const response = await fetch(`${API_BASE}/scans/${currentScanId}/control`, {
+        const response = await fetch(`${API_BASE}/scans/${scanId}/control`, {
             method: 'POST',
             headers: getAuthHeaders({
                 'Content-Type': 'application/json'
@@ -1891,13 +1909,20 @@ async function handlePauseResume() {
             const result = await response.json();
             
             // Update button text and state
+            if (button) {
+                if (action === 'pause') {
+                    button.innerHTML = '▶️ Resume';
+                    button.className = 'btn btn-primary';
+                } else {
+                    button.innerHTML = '⏸️ Pause';
+                    button.className = 'btn btn-warning';
+                }
+            }
+
             if (action === 'pause') {
-                button.innerHTML = '▶️ Resume';
-                button.className = 'btn btn-primary';
                 showToast('Scan paused successfully', 'info');
+                startScanPolling(scanId);
             } else {
-                button.innerHTML = '⏸️ Pause'; 
-                button.className = 'btn btn-warning';
                 showToast('Scan resumed successfully', 'success');
             }
             
@@ -1988,6 +2013,11 @@ async function loadHits() {
         console.error('Failed to load hits:', error);
         showUserMessage('Failed to load scan results', 'error');
     }
+}
+
+// Export functions
+async function handleExportHits() {
+    console.log('Export hits triggered');
 }
 
 async function loadSettings() {
@@ -2140,8 +2170,11 @@ async function stopScan(scanId) {
 }
 
 async function handleStopScan() {
-    if (currentScanId) {
-        await stopScan(currentScanId);
+    const scanId = getActiveScanId();
+    if (scanId) {
+        await stopScan(scanId);
+    } else {
+        showUserMessage('No active scan to stop', 'warning');
     }
 }
 
