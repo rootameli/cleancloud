@@ -47,6 +47,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-development-key}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - HTTPX_PATH=/usr/local/bin/pd-httpx
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY:-1000}
