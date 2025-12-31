@@ -6,16 +6,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install httpx tool
+# Install ProjectDiscovery httpx binary (avoid python CLI collision)
 RUN curl -s https://api.github.com/repos/projectdiscovery/httpx/releases/latest \
     | grep "browser_download_url.*linux_amd64.zip" \
     | cut -d '"' -f 4 \
     | xargs curl -L -o httpx.zip \
     && unzip httpx.zip \
-    && mv httpx /usr/local/bin/ \
-    && chmod +x /usr/local/bin/httpx \
+    && mv httpx /usr/local/bin/pd-httpx \
+    && chmod +x /usr/local/bin/pd-httpx \
     && rm httpx.zip
 
 # Production stage
@@ -27,7 +28,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy httpx binary from builder
-COPY --from=builder /usr/local/bin/httpx /usr/local/bin/httpx
+COPY --from=builder /usr/local/bin/pd-httpx /usr/local/bin/pd-httpx
 
 # Create app user
 RUN useradd --create-home --shell /bin/bash app

@@ -19,6 +19,7 @@ from .core.database import init_database, cleanup_database
 from .core.redis_manager import init_redis, close_redis
 from .core.scanner_enhanced import enhanced_scanner
 from .core.httpx_async_scanner import httpx_async_scanner
+from .core.httpx_executor import httpx_executor
 from .core.notifications import notification_manager
 from .core.metrics import metrics
 from .core.modules_loader import modules_loader
@@ -276,11 +277,19 @@ async def startup_event():
         # Initialize enhanced scanner
         await enhanced_scanner.initialize()
         logger.info("Enhanced scanner initialized")
-        
+
         # Initialize HTTPx async scanner
         await httpx_async_scanner.initialize()
         logger.info("HTTPx async scanner initialized")
-        
+
+        # Verify httpx binary availability and origin
+        verified = await httpx_executor.verify_httpx_binary()
+        if not verified:
+            logger.warning(
+                "httpx binary verification failed or non-ProjectDiscovery build detected",
+                path=httpx_executor.httpx_path,
+            )
+
         # Initialize modules loader
         modules_loader.initialize()
         logger.info("Modules loader initialized", available=modules_loader.is_available())
