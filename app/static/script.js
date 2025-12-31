@@ -202,12 +202,15 @@ function setupEventListeners() {
 function initializeUIComponents() {
     // Update concurrency slider display
     updateConcurrencyDisplay();
-    
+
     // Set initial generator config
     handleGeneratorTypeChange();
-    
+
     // Attach scan form gating
     attachScanFormGating();
+
+    // Minimal regression check: ensure the targets list selector exists
+    console.log('targetsListId selector present:', !!document.getElementById('targetsListId'));
 }
 
 // Authentication functions
