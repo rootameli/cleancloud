@@ -317,7 +317,7 @@
                                 <div class="form-group">
                                     <label for="targetsListId">Saved Target Lists:</label>
                                     <select id="targetsListId" name="targetsListId">
-                                        <option value="">Select a saved list (optional)</option>
+                                        <option value="">— Select a list —</option>
                                     </select>
                                     <small>Choose a previously uploaded target list or paste targets below</small>
                                 </div>
@@ -461,7 +461,7 @@
 
                             <!-- Launch Controls -->
                             <div class="launch-section">
-                                <button type="submit" class="btn btn-launch">
+                                <button id="startScanBtn" type="submit" class="btn btn-launch">
                                     <span class="btn-icon">🚀</span>
                                     <span class="btn-text">Launch Intelligence Operation</span>
                                 </button>
@@ -474,8 +474,8 @@
                         <div class="scan-header">
                             <h2 id="activeScanTitle">🎯 Operation: Loading...</h2>
                             <div class="scan-controls">
-                                <button id="pauseResumeBtn" class="btn btn-warning">⏸️ Pause</button>
-                                <button id="stopScanBtn" class="btn btn-danger">🛑 Stop</button>
+                                <button id="pauseScanBtn" type="button" class="btn btn-warning">⏸️ Pause</button>
+                                <button id="stopScanBtn" type="button" class="btn btn-danger">🛑 Stop</button>
                             </div>
                         </div>
 
