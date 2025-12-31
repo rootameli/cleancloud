@@ -1,5 +1,6 @@
 import bcrypt
-import jwt
+from jose import jwt
+from jose.exceptions import JWTError, ExpiredSignatureError
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict

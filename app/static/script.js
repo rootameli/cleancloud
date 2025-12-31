@@ -470,6 +470,21 @@ function restoreLastScanSession() {
     return true;
 }
 
+function restoreLastScanSession() {
+    const hashScanId = getScanIdFromHash();
+    const storedScanId = localStorage.getItem('lastScanId');
+    const scanId = hashScanId || storedScanId;
+
+    if (!scanId) {
+        return false;
+    }
+
+    switchTab('scan');
+    showLiveScanMonitor(scanId);
+    startScanTracking(scanId);
+    return true;
+}
+
 function switchTab(tabName) {
     if (!isAuthenticated && tabName !== 'login') {
         console.warn('Cannot switch tab while unauthenticated');
