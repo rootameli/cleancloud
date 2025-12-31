@@ -4,10 +4,12 @@
 let authToken = sanitizeAuthToken(localStorage.getItem('authToken'));
 let currentUser = null;
 let currentScanId = null;
-let selectedTargetsListId = localStorage.getItem('selectedTargetsListId');
-if (selectedTargetsListId === 'null' || selectedTargetsListId === 'undefined') {
-    selectedTargetsListId = null;
+function sanitizeStoredId(value) {
+    if (!value || value === 'null' || value === 'undefined') return null;
+    return value;
 }
+
+let selectedTargetsListId = sanitizeStoredId(localStorage.getItem('selectedTargetsListId'));
 let websocketConnection = null;
 let dashboardWebSocket = null;
 let isFirstLogin = false;
@@ -398,7 +400,7 @@ function restoreLastScanSession() {
     }
 
     switchTab('scan');
-    showLiveScanMonitor({ crack_id: scanId });
+    showLiveScanMonitor(scanId);
     startScanTracking(scanId);
     return true;
 }
@@ -922,7 +924,11 @@ function connectDashboardWebSocket() {
 }
 
 function startScanTracking(scanId) {
-    if (!scanId) return;
+    if (!scanId) {
+        showUserMessage('No scan ID available to track. Returning to scan setup.', 'error');
+        switchTab('scan');
+        return;
+    }
 
     currentScanId = scanId;
     setLastScanId(scanId);
@@ -945,6 +951,7 @@ function startScanTracking(scanId) {
     const triggerFallback = () => {
         if (fallbackStarted) return;
         fallbackStarted = true;
+        console.warn('Scan WebSocket unavailable; starting polling fallback', { scanId });
         startScanPolling(scanId);
     };
 
@@ -1403,6 +1410,60 @@ function updateScanStartGating() {
     }
 }
 
+function isValidIPv4(target) {
+    const parts = target.split('.');
+    if (parts.length !== 4) return false;
+    return parts.every(part => {
+        if (!/^\d+$/.test(part)) return false;
+        const num = Number(part);
+        return num >= 0 && num <= 255 && String(num) === part;
+    });
+}
+
+function isValidHostname(target) {
+    if (target.length > 253) return false;
+    if (!/^[a-zA-Z0-9.-]+$/.test(target)) return false;
+    const labels = target.split('.');
+    return labels.every(label => {
+        if (!label.length || label.length > 63) return false;
+        return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label);
+    });
+}
+
+function sanitizeTargets(rawTargets) {
+    const lines = (rawTargets || '').split('\n').map(line => line.trim()).filter(Boolean);
+    const seen = new Set();
+    const cleanTargets = [];
+    const invalidTargets = [];
+
+    lines.forEach(original => {
+        let target = original.replace(/^https?:\/\//i, '');
+        while (target.endsWith('.')) {
+            target = target.slice(0, -1);
+        }
+
+        if (!target) {
+            invalidTargets.push(original);
+            return;
+        }
+
+        const lowered = target.toLowerCase();
+        const valid = isValidIPv4(target) || isValidHostname(target);
+
+        if (!valid) {
+            invalidTargets.push(original);
+            return;
+        }
+
+        if (!seen.has(lowered)) {
+            seen.add(lowered);
+            cleanTargets.push(target);
+        }
+    });
+
+    return { cleanTargets, invalidTargets };
+}
+
 function attachScanFormGating() {
     // Attach event listeners to form fields that affect readiness
     const fields = [
@@ -1489,10 +1550,12 @@ function populateScanListSelector(lists) {
         selector.appendChild(option);
     });
 
-    if (selectedTargetsListId) {
-        const hasOption = targetLists.some(list => list.id === selectedTargetsListId);
+    const storedListId = sanitizeStoredId(selectedTargetsListId || localStorage.getItem('selectedTargetsListId'));
+    if (storedListId) {
+        const hasOption = targetLists.some(list => list.id === storedListId);
         if (hasOption) {
-            selector.value = selectedTargetsListId;
+            selector.value = storedListId;
+            setSelectedListId(storedListId, 'restore');
             handleListSelection({ target: selector });
         }
     }
@@ -1502,16 +1565,21 @@ function populateScanListSelector(lists) {
     selector.addEventListener('change', handleListSelection);
 }
 
-function handleListSelection(e) {
-    const listId = e.target.value;
-    const targetsTextarea = document.getElementById('targets');
-
+function setSelectedListId(listId, source = 'manual') {
     selectedTargetsListId = listId || null;
     if (selectedTargetsListId) {
         localStorage.setItem('selectedTargetsListId', selectedTargetsListId);
     } else {
         localStorage.removeItem('selectedTargetsListId');
     }
+    console.log('Selected list updated', { listId: selectedTargetsListId, source });
+}
+
+function handleListSelection(e) {
+    const listId = e.target.value;
+    const targetsTextarea = document.getElementById('targets');
+
+    setSelectedListId(listId, 'dropdown');
 
     if (listId && targetsTextarea) {
         // When a list is selected, clear the textarea and update gating
@@ -1525,6 +1593,21 @@ function handleListSelection(e) {
     }
     
     updateScanStartGating();
+}
+
+function resolveSelectedListId() {
+    const selector = document.getElementById('targetsListId');
+    const dropdownValue = selector ? sanitizeStoredId(selector.value) : null;
+    if (dropdownValue) {
+        return { listId: dropdownValue, source: 'dropdown' };
+    }
+
+    const stored = sanitizeStoredId(selectedTargetsListId || localStorage.getItem('selectedTargetsListId'));
+    if (stored) {
+        return { listId: stored, source: 'storage' };
+    }
+
+    return { listId: null, source: 'none' };
 }
 
 function displayLists(lists) {
@@ -1628,18 +1711,32 @@ async function handleScanSubmit(e) {
     }
     
     const formData = new FormData(e.target);
-    
+    const { listId: resolvedListId, source: listSource } = resolveSelectedListId();
+    console.log('Resolved list for scan submit', { list_id: resolvedListId, source: listSource });
+
     // Determine targets source
     let targets = [];
-    const selectedListId = formData.get('targetsListId') || selectedTargetsListId;
+    let invalidTargets = [];
 
-    if (selectedListId) {
+    if (resolvedListId) {
         // Use selected list - targets will be loaded server-side
         targets = []; // Empty array indicates list should be used
     } else {
-        // Use pasted targets
-        const targetText = formData.get('targets');
-        targets = targetText.split('\n').filter(t => t.trim()).map(t => t.trim());
+        const targetText = formData.get('targets') || '';
+        const sanitized = sanitizeTargets(targetText);
+        targets = sanitized.cleanTargets;
+        invalidTargets = sanitized.invalidTargets;
+
+        if (invalidTargets.length > 0) {
+            const preview = invalidTargets.slice(0, 20).join(', ');
+            const suffix = invalidTargets.length > 20 ? ` ... (+${invalidTargets.length - 20} more)` : '';
+            showUserMessage(`Some targets were ignored because they are invalid: ${preview}${suffix}`, 'warning', 'Targets Sanitized');
+        }
+    }
+
+    if (!resolvedListId && targets.length === 0) {
+        showUserMessage('Please provide valid targets or select a list before starting a scan', 'error', 'Scan Validation Failed');
+        return;
     }
 
     if (!selectedListId && targets.length === 0) {
@@ -1651,10 +1748,13 @@ async function handleScanSubmit(e) {
     const modules = Array.from(document.querySelectorAll('input[name="modules"]:checked')).map(cb => cb.value);
     const services = Array.from(document.querySelectorAll('input[name="services"]:checked')).map(cb => cb.value);
     
+    const payloadListId = resolvedListId ? `${resolvedListId}` : null;
+    console.log('Submitting scan payload', { list_id: payloadListId, listSource, targetsCount: targets.length });
+
     const scanRequest = {
         name: formData.get('crackName'),
         targets: targets,
-        list_id: selectedListId || null,
+        list_id: payloadListId,
         wordlist: formData.get('wordlist'),
         concurrency: parseInt(formData.get('concurrency')),
         timeout: parseInt(formData.get('timeout')),
@@ -1671,10 +1771,16 @@ async function handleScanSubmit(e) {
             }),
             body: JSON.stringify(scanRequest)
         });
-        
+
         if (response.ok) {
             const result = await response.json();
+            if (!result.scan_id) {
+                showUserMessage('Scan ID missing from response; please try again.', 'error', 'Scan Start Failed');
+                switchTab('scan');
+                return;
+            }
             currentScanId = result.scan_id;
+            console.log('Scan created', { scan_id: currentScanId });
             setLastScanId(currentScanId);
 
             showUserMessage(`Scan started successfully: ${result.scan_id}`, 'success', 'Operation Launched');
@@ -1934,8 +2040,7 @@ async function uploadList(formData, fileName) {
             showUserMessage(`List "${fileName}" uploaded successfully (${result.size} items)`, 'success');
 
             if (result.id) {
-                selectedTargetsListId = result.id;
-                localStorage.setItem('selectedTargetsListId', selectedTargetsListId);
+                setSelectedListId(result.id, 'upload');
                 const selector = document.getElementById('targetsListId');
                 if (selector) {
                     selector.value = result.id;
@@ -1955,14 +2060,6 @@ async function uploadList(formData, fileName) {
     }
 }
 
-function useList(listId) {
-    console.log('Use list:', listId);
-}
-
-function deleteList(listId) {
-    console.log('Delete list:', listId);
-}
-
 function viewScanDetails(scanId) {
     console.log('View scan details:', scanId);
     // Switch to scan tab and connect to scan WebSocket
@@ -1971,7 +2068,7 @@ function viewScanDetails(scanId) {
     startScanTracking(scanId);
 
     // Show scan details
-    showLiveScanMonitor({scan_id: scanId, crack_id: scanId});
+    showLiveScanMonitor(scanId);
 }
 
 async function pauseScan(scanId) {
