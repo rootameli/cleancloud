@@ -9,7 +9,7 @@ function sanitizeStoredId(value) {
     return value;
 }
 
-let selectedTargetsListId = sanitizeStoredId(localStorage.getItem('selectedTargetsListId'));
+let selectedListId = sanitizeStoredId(localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
 let websocketConnection = null;
 let dashboardWebSocket = null;
 let isFirstLogin = false;
@@ -1431,6 +1431,13 @@ function isValidHostname(target) {
 }
 
 function sanitizeTargets(rawTargets) {
+    if (Array.isArray(rawTargets)) {
+        rawTargets = rawTargets.join('\n');
+    } else if (typeof rawTargets !== 'string') {
+        console.warn('sanitizeTargets received non-text input; skipping sanitization', { inputType: typeof rawTargets });
+        return { cleanTargets: [], invalidTargets: [] };
+    }
+
     const lines = (rawTargets || '').split('\n').map(line => line.trim()).filter(Boolean);
     const seen = new Set();
     const cleanTargets = [];
@@ -1550,7 +1557,7 @@ function populateScanListSelector(lists) {
         selector.appendChild(option);
     });
 
-    const storedListId = sanitizeStoredId(selectedTargetsListId || localStorage.getItem('selectedTargetsListId'));
+    const storedListId = sanitizeStoredId(selectedListId || localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
     if (storedListId) {
         const hasOption = targetLists.some(list => list.id === storedListId);
         if (hasOption) {
@@ -1566,17 +1573,19 @@ function populateScanListSelector(lists) {
 }
 
 function setSelectedListId(listId, source = 'manual') {
-    selectedTargetsListId = listId || null;
-    if (selectedTargetsListId) {
-        localStorage.setItem('selectedTargetsListId', selectedTargetsListId);
+    selectedListId = sanitizeStoredId(listId);
+    if (selectedListId) {
+        localStorage.setItem('selectedListId', selectedListId);
+        localStorage.setItem('selectedTargetsListId', selectedListId); // legacy compatibility
     } else {
+        localStorage.removeItem('selectedListId');
         localStorage.removeItem('selectedTargetsListId');
     }
-    console.log('Selected list updated', { listId: selectedTargetsListId, source });
+    console.log('Selected list updated', { listId: selectedListId, source });
 }
 
 function handleListSelection(e) {
-    const listId = e.target.value;
+    const listId = sanitizeStoredId(e.target.value);
     const targetsTextarea = document.getElementById('targets');
 
     setSelectedListId(listId, 'dropdown');
@@ -1602,7 +1611,7 @@ function resolveSelectedListId() {
         return { listId: dropdownValue, source: 'dropdown' };
     }
 
-    const stored = sanitizeStoredId(selectedTargetsListId || localStorage.getItem('selectedTargetsListId'));
+    const stored = sanitizeStoredId(selectedListId || localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
     if (stored) {
         return { listId: stored, source: 'storage' };
     }
@@ -1736,11 +1745,6 @@ async function handleScanSubmit(e) {
 
     if (!resolvedListId && targets.length === 0) {
         showUserMessage('Please provide valid targets or select a list before starting a scan', 'error', 'Scan Validation Failed');
-        return;
-    }
-
-    if (!selectedListId && targets.length === 0) {
-        showUserMessage('Please provide targets or select a list before starting a scan', 'error', 'Scan Validation Failed');
         return;
     }
     
