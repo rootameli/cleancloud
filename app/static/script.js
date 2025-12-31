@@ -10,6 +10,7 @@ function sanitizeStoredId(value) {
 }
 
 let selectedListId = sanitizeStoredId(localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
+console.log('targetsListId exists on load:', !!document.getElementById('targetsListId'));
 let websocketConnection = null;
 let dashboardWebSocket = null;
 let isFirstLogin = false;
@@ -782,7 +783,7 @@ function displayLists(lists) {
         <div class="list-card" data-list-id="${list.id}">
             <div class="list-header">
                 <h4>${list.name}</h4>
-                <span class="list-type ${list.list_type}">${list.list_type}</span>
+                <span class="list-type ${list.category || list.list_type}">${list.category || list.list_type}</span>
             </div>
             <div class="list-stats">
                 <div class="stat">
@@ -1511,15 +1512,19 @@ async function loadLists() {
         if (response.ok) {
             const lists = await response.json();
             cachedLists = lists;
-            
+
             // Store in localStorage for offline access
             localStorage.setItem('cachedLists', JSON.stringify(lists));
-            
+
+            console.log('lists fetched:', lists.length);
             displayLists(lists);
             populateScanListSelector(lists);
         } else if (response.status === 401) {
-            // Authentication error - handled elsewhere
             console.warn('Authentication required for lists');
+            showUserMessage('Session expired. Please log in again to load lists.', 'error');
+            handleLogout();
+            showLogin();
+            return;
         } else {
             throw new Error(`Failed to load lists: ${response.status}`);
         }
@@ -1546,13 +1551,17 @@ async function loadLists() {
 
 function populateScanListSelector(lists) {
     const selector = document.getElementById('targetsListId');
+    console.log('targetsListId exists:', !!selector);
     if (!selector) return;
 
     // Clear existing options except default
-    selector.innerHTML = '<option value="">Select a saved list (optional)</option>';
+    selector.innerHTML = '<option value="">— Select a list —</option>';
 
-    // Add target lists only
-    const targetLists = lists.filter(list => list.list_type === 'targets' || list.list_type === 'mixed');
+    const targetLists = lists.filter(list => {
+        const category = list.category || list.list_type;
+        return category === 'targets' || category === 'mixed';
+    });
+
     targetLists.forEach(list => {
         const option = document.createElement('option');
         option.value = list.id;
@@ -1562,13 +1571,17 @@ function populateScanListSelector(lists) {
 
     const storedListId = sanitizeStoredId(selectedListId || localStorage.getItem('selectedListId') || localStorage.getItem('selectedTargetsListId'));
     if (storedListId) {
-        const hasOption = targetLists.some(list => list.id === storedListId);
-        if (hasOption) {
+        const optionExists = !!selector.querySelector(`option[value="${storedListId}"]`);
+        if (optionExists) {
             selector.value = storedListId;
             setSelectedListId(storedListId, 'restore');
             handleListSelection({ target: selector });
+        } else {
+            setSelectedListId(null, 'restore-missing');
         }
     }
+
+    console.log('selector options after populate:', selector.options.length);
 
     // Add event listener for list selection
     selector.removeEventListener('change', handleListSelection); // Remove existing listener
@@ -1635,7 +1648,7 @@ function displayLists(lists) {
         <div class="list-card card-hover transition-fast" data-list-id="${list.id}">
             <div class="list-header">
                 <h4>${list.name}</h4>
-                <span class="list-type ${list.list_type}">${list.list_type}</span>
+                <span class="list-type ${list.category || list.list_type}">${list.category || list.list_type}</span>
             </div>
             <div class="list-stats">
                 <div class="stat">
