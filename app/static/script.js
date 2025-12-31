@@ -1775,14 +1775,6 @@ async function handleScanSubmit(e) {
     const services = Array.from(document.querySelectorAll('input[name="services"]:checked')).map(cb => cb.value);
     
     const payloadListId = resolvedListId ? `${resolvedListId}` : null;
-    console.log('Submitting scan payload', {
-        list_id: payloadListId,
-        listSource,
-        targetsCount: targets.length,
-        wordlist: scanRequest.wordlist,
-        concurrency: scanRequest.concurrency
-    });
-
     const scanRequest = {
         name: formData.get('crackName'),
         targets: targets,
@@ -1793,6 +1785,14 @@ async function handleScanSubmit(e) {
         modules: modules,
         services: services
     };
+
+    console.log('Submitting scan payload', {
+        list_id: payloadListId,
+        listSource,
+        targetsCount: targets.length,
+        wordlist: scanRequest.wordlist,
+        concurrency: scanRequest.concurrency
+    });
     
     try {
         showLoading('scanForm');
